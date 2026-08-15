@@ -1,0 +1,33 @@
+name: Bug report
+description: Report reproducible incorrect or broken behaviour
+title: '[Bug]: '
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not attach private games without removing names and other personal tags.
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Include the expected and actual behaviour.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: Give the smallest PGN/FEN and exact steps that reproduce the issue.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Browser, OS, and ProphyLens commit/version
+    validations:
+      required: true
+  - type: textarea
+    id: provenance
+    attributes:
+      label: Analysis provenance
+      description: If relevant, include engine version, node budget, NNUE, classifier, and peer source/sample.

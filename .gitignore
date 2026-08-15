@@ -1,0 +1,15 @@
+node_modules/
+dist/
+coverage/
+.vite/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
+npm-debug.log*
+CHESSMUAH_CONVERSATION.md
+public/engine/*.js
+public/engine/*.wasm
+public/engine/*.nnue

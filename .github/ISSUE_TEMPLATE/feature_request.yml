@@ -1,0 +1,34 @@
+name: Feature proposal
+description: Propose a scoped product, research, or engineering change
+title: '[Proposal]: '
+labels: [proposal]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user or research problem exists? Avoid starting with the implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Games, benchmarks, user observations, or comparable projects that support the need.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change and alternatives
+    validations:
+      required: true
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: Project boundaries
+      options:
+        - label: This is for completed-game study, not live assistance.
+          required: true
+        - label: This does not make cheat-detection claims.
+          required: true
