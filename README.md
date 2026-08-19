@@ -24,6 +24,25 @@ Play -> diagnose -> practise -> re-test -> measure improvement
 
 **Pre-alpha / spike stage.** The repository contains a runnable web shell, typed domain contracts, transparent scoring primitives, tests, and the product/architecture decisions needed to run three go/no-go experiments before full UI development.
 
+## User system requirements
+
+ProphyLens is planned as a browser application, so ordinary users will not need to install Node.js or development tools. The requirements below are provisional until the Stockfish engine spike measures performance on real hardware.
+
+| Experience | Suggested hardware | What to expect |
+|---|---|---|
+| Minimum | Modern 64-bit computer, 4 CPU threads, 4 GB RAM | Usable with lighter analysis; complete games may take longer |
+| Recommended | 4–6 CPU cores, 8 GB RAM | Comfortable everyday game analysis |
+| Heavy analysis | 8+ CPU cores, 16 GB RAM | Faster, deeper analysis with several suggested moves |
+
+Additional notes:
+
+- A current desktop version of Chrome or Edge will be the initial target; Firefox support will be tested separately.
+- No dedicated graphics card is required. Stockfish primarily uses the processor.
+- Reserve approximately 250–500 MB of storage for the application, engine files and saved analyses.
+- Internet access is required for the initial application load and Lichess peer statistics. Local Stockfish analysis can work offline after its files are cached.
+- Desktop computers and laptops are the initial target. Mobile performance and battery use will be evaluated later.
+- Actual analysis time depends on the processor, search budget and number of alternative moves requested. No fixed full-game completion time is promised until benchmarking is complete.
+
 ## The chess brain
 
 ```text
