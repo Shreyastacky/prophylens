@@ -28,11 +28,11 @@ Play -> diagnose -> practise -> re-test -> measure improvement
 
 ProphyLens is planned as a browser application, so ordinary users will not need to install Node.js or development tools. The requirements below are provisional until the Stockfish engine spike measures performance on real hardware.
 
-| Experience     | Suggested hardware                                  | What to expect                                                       |
-| -------------- | --------------------------------------------------- | -------------------------------------------------------------------- |
-| Minimum        | Modern 64-bit computer, 4 CPU threads, 4 GB RAM      | Usable with lighter analysis; complete games may take longer         |
-| Recommended    | 4–6 CPU cores, 8 GB RAM                              | Comfortable everyday game analysis                                  |
-| Heavy analysis | 8+ CPU cores, 16 GB RAM                              | Faster, deeper analysis with several suggested moves                 |
+| Experience     | Suggested hardware                              | What to expect                                               |
+| -------------- | ----------------------------------------------- | ------------------------------------------------------------ |
+| Minimum        | Modern 64-bit computer, 4 CPU threads, 4 GB RAM | Usable with lighter analysis; complete games may take longer |
+| Recommended    | 4–6 CPU cores, 8 GB RAM                         | Comfortable everyday game analysis                           |
+| Heavy analysis | 8+ CPU cores, 16 GB RAM                         | Faster, deeper analysis with several suggested moves         |
 
 Additional notes:
 
