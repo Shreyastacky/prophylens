@@ -51,6 +51,8 @@ Returns the same `PeerBaseline` contract for explorer, static-index, and future 
 
 Combines WDL loss, stability, forcedness, motifs, peer data, and time context into a versioned result. It is deterministic and benchmarked.
 
+Its output is not a single classification label. Forcedness (`forced`, `onlyMove`) and peer-relative labelling (`peerLabel`, `peerSource`) are separate axes on `MoveReview`, not one union, because they vary independently: a move can be forced *and* a personal leak (there is only one move that avoids a large loss here, and this player still doesn't find it), or natural *and* engine-only (peers play something reasonable, but the engine's actual best move is invisible to human search). Collapsing them into a single field forces a lossy choice at annotation time. See `MoveReview` in `packages/contracts/src/index.ts`.
+
 ### Player model
 
 Aggregates motif evidence across games. Exact-position repetition is supporting evidence, not the unit of diagnosis.

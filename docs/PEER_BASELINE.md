@@ -22,15 +22,25 @@ Building a multi-terabyte pipeline before this test would be expensive theatre.
 
 ## Source data
 
-The official Lichess database is released as monthly compressed PGN (`.pgn.zst`), not ready-made hive-partitioned Parquet. A production build therefore needs:
+The default source is Lichess's `Lichess/standard-chess-games` dataset on Hugging Face: CC0, hive-partitioned Parquet by year/month, updated monthly. Column pushdown makes filtering by rating, speed, and result cheap before any position reconstruction happens, and there is no decompression stage to write or maintain. Fall back to the official monthly compressed PGN dump (`.pgn.zst`) only where the Parquet dataset is missing a month, lagging behind the PGN release, or an audit specifically wants the primary source.
 
-1. a streaming decompression/parser stage;
-2. validation of standard, rated, non-bot games;
-3. position reconstruction with a legal chess library;
-4. internal unthresholded aggregation;
-5. privacy/sparsity filtering only at publication time.
+Either way, a production build still needs:
+
+1. validation of standard, rated, non-bot games;
+2. position reconstruction with a legal chess library;
+3. internal unthresholded aggregation;
+4. privacy/sparsity filtering only at publication time.
+
+Two caveats:
+
+- The dataset card carries a work-in-progress warning. Pin an exact revision (a commit hash, not `main`/latest) when ingesting, so an upstream change doesn't silently shift results between runs.
+- Parquet removes decompression and makes filtering cheap; it does not remove the ingestion pipeline. The movetext column is still SAN, not a legal-move stream — it needs the same position reconstruction as the `.pgn.zst` fallback. Parquet is a faster front door onto the same pipeline, not a replacement for it.
 
 Do not delete low-count rows from the only aggregate. Future months must merge into an internal unthresholded store; the public release is derived from it.
+
+## Evaluation annotations (`%eval`)
+
+Some Lichess games carry `%eval` comments — Stockfish evaluations Lichess attaches when a player requests computer analysis. This is not a clean labelled corpus for benchmarking a review classifier or motif rule. The annotations come from a self-selected sample (players who request analysis, on games they chose to analyse), not a random slice of games, and the engine version and search depth behind them varies across the corpus as Lichess has upgraded its analysis pipeline over time. Selection bias — who requests analysis, on which game outcomes, at what depth, on which platform version — must be measured before `%eval` is used as ground truth for anything. Until then, treat it as a candidate signal to validate, not a labelled dataset to train or grade against.
 
 ## Position identity
 
