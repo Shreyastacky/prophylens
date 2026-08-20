@@ -21,7 +21,7 @@
 - [ ] Board, move list, keyboard navigation, and accessible controls
 - [ ] Stockfish worker, progress, pause, cancel, crash recovery
 - [ ] Evaluation/WDL graph and legal principal variations
-- [ ] Versioned basic classifications with confidence
+- [ ] Versioned review output — `peerLabel`, `peerSource`, `forced`, `onlyMove` as separate axes, with confidence (see docs/ARCHITECTURE.md, "Review classifier")
 - [ ] Local history and annotated PGN export
 
 ## 3. Improvement loop
