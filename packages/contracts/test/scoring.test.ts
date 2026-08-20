@@ -25,24 +25,25 @@ describe('peer scoring primitives', () => {
 });
 
 describe('lesson priority', () => {
-  it('requires every product factor to be present', () => {
-    expect(
-      lessonPriority({
-        severity: 1,
-        recurrence: 1,
-        fixability: 1,
-        confidence: 1,
-        futureExposure: 1,
-      }),
-    ).toBe(1);
-    expect(
-      lessonPriority({
-        severity: 1,
-        recurrence: 0,
-        fixability: 1,
-        confidence: 1,
-        futureExposure: 1,
-      }),
-    ).toBe(0);
+  it('returns 1 when every ranking factor is maximal', () => {
+    const { priority, zeroedBy } = lessonPriority({
+      severity: 1,
+      recurrence: 1,
+      fixability: 1,
+      futureExposure: 1,
+    });
+    expect(priority).toBe(1);
+    expect(zeroedBy).toEqual([]);
+  });
+
+  it('suppresses a zero-recurrence lesson by ranking it last, and says why', () => {
+    const result = lessonPriority({
+      severity: 1,
+      recurrence: 0,
+      fixability: 1,
+      futureExposure: 1,
+    });
+    expect(result.priority).toBe(0);
+    expect(result.zeroedBy).toEqual(['recurrence']);
   });
 });
