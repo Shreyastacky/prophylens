@@ -63,6 +63,8 @@ Verified explanation (optional LLM rephrasing only)
 
 Stockfish decides what works. ProphyLens extracts what changed, identifies the motif, compares it with rating-appropriate human behaviour, and decides what is worth teaching. An LLM may eventually rewrite verified facts; it never evaluates a position.
 
+The peer-calibration step above is unvalidated: it ships only if Spike B (peer UX and coverage, see [docs/SPIKES.md](docs/SPIKES.md) and [ADR 0002](docs/adr/0002-validate-peer-ux-before-index.md)) shows that peer context actually changes lesson selection or explanation.
+
 ## Start locally
 
 Requirements: Node.js 22+ and npm 11+.
