@@ -1,6 +1,6 @@
 import type { AnalysisRun } from './types';
 
-const LAST_ANALYSIS_KEY = 'prophylens:last-analysis:v1';
+const LAST_ANALYSIS_KEY = 'prophylens:last-analysis:v2';
 
 export async function sha256(text: string): Promise<string> {
   const bytes = new TextEncoder().encode(text);

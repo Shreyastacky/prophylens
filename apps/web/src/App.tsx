@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { assessMove } from './analysis/classification';
 import { parseGame } from './analysis/pgn';
 import { downloadAnalysis, saveLastAnalysis, sha256 } from './analysis/storage';
 import { StockfishClient } from './analysis/stockfish';
 import type { AnalysisRun, AnalysisSettings, PositionAnalysis } from './analysis/types';
 import { ENGINE_ASSET } from './analysis/types';
+import { Chessboard, moveToSan } from './Chessboard';
 
 const examplePgn = `[Event "Example"]
 [White "You"]
@@ -20,26 +22,6 @@ interface ProgressState {
   total: number;
   nodes: number;
   move: string;
-}
-
-function whitePerspectiveScore(result: PositionAnalysis): { cp?: number; mate?: number } {
-  const line = result.lines[0];
-  if (!line) return {};
-  const direction = result.sideToMove === 'white' ? 1 : -1;
-  return {
-    cp: line.scoreCp === undefined ? undefined : line.scoreCp * direction,
-    mate: line.mateIn === undefined ? undefined : line.mateIn * direction,
-  };
-}
-
-function formatScore(result: PositionAnalysis): string {
-  const score = whitePerspectiveScore(result);
-  if (score.mate !== undefined) {
-    return score.mate > 0 ? `M${score.mate}` : `-M${Math.abs(score.mate)}`;
-  }
-  if (score.cp === undefined) return '—';
-  const pawns = score.cp / 100;
-  return `${pawns >= 0 ? '+' : ''}${pawns.toFixed(2)}`;
 }
 
 function moveNumber(ply: number): string {
@@ -65,6 +47,7 @@ export function App() {
   const [status, setStatus] = useState<EngineStatus>('idle');
   const [engineName, setEngineName] = useState('Stockfish 18 Lite');
   const [results, setResults] = useState<PositionAnalysis[]>([]);
+  const [selectedPly, setSelectedPly] = useState<number | null>(null);
   const [run, setRun] = useState<AnalysisRun | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [progress, setProgress] = useState<ProgressState>({
@@ -94,6 +77,27 @@ export function App() {
     },
     [],
   );
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.matches('textarea, input, select')) return;
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+      setSelectedPly((current) => {
+        const index = Math.max(
+          0,
+          results.findIndex((result) => result.ply === current),
+        );
+        const nextIndex =
+          event.key === 'ArrowLeft'
+            ? Math.max(0, index - 1)
+            : Math.min(results.length - 1, index + 1);
+        return results[nextIndex]?.ply ?? current;
+      });
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [results]);
 
   const ensureClient = () => {
     if (!clientRef.current) clientRef.current = new StockfishClient();
@@ -128,6 +132,7 @@ export function App() {
     const abortController = new AbortController();
     abortRef.current = abortController;
     setResults([]);
+    setSelectedPly(null);
     setRun(null);
     setErrorMessage(null);
     setStatus('loading');
@@ -151,11 +156,12 @@ export function App() {
         );
         completedResults.push(result);
         setResults([...completedResults]);
+        setSelectedPly((current) => current ?? result.ply);
         setProgress((current) => ({ ...current, completed: completedResults.length }));
       }
 
       const finishedRun: AnalysisRun = {
-        schemaVersion: 1,
+        schemaVersion: 2,
         createdAt: new Date().toISOString(),
         pgnSha256: await sha256(pgn),
         game: { headers: parsed.game.headers, plies: parsed.game.positions.length },
@@ -172,6 +178,7 @@ export function App() {
           hashMb: 16,
           nodesPerPosition: settings.nodes,
           multiPv: settings.multiPv,
+          classifierVersion: 'move-loss-v1',
         },
         positions: completedResults,
       };
@@ -194,8 +201,15 @@ export function App() {
   };
 
   const totalProgress = progress.total
-    ? ((progress.completed + Math.min(progress.nodes / settings.nodes, 1)) / progress.total) * 100
+    ? ((progress.completed + Math.min(progress.nodes / (settings.nodes * 2), 1)) / progress.total) *
+      100
     : 0;
+
+  const selectedIndex = Math.max(
+    0,
+    results.findIndex((result) => result.ply === selectedPly),
+  );
+  const selectedResult = results[selectedIndex] ?? null;
 
   return (
     <main>
@@ -306,8 +320,8 @@ export function App() {
               </div>
               <progress value={totalProgress} max="100" />
               <small>
-                {progress.nodes.toLocaleString()} / {settings.nodes.toLocaleString()} nodes in this
-                position
+                {progress.nodes.toLocaleString()} / approximately{' '}
+                {(settings.nodes * 2).toLocaleString()} search nodes in this position
               </small>
             </div>
           )}
@@ -323,8 +337,8 @@ export function App() {
       <section className="results" aria-labelledby="results-heading">
         <div className="results-header">
           <div>
-            <p className="step">02 / RAW ENGINE EVIDENCE</p>
-            <h2 id="results-heading">Every result keeps its receipt.</h2>
+            <p className="step">02 / MOVE REVIEW</p>
+            <h2 id="results-heading">See what changed when you moved.</h2>
           </div>
           {run && (
             <button className="secondary-button" onClick={() => downloadAnalysis(run)}>
@@ -338,29 +352,52 @@ export function App() {
             No engine evidence yet. Analyse the sample game above to start.
           </p>
         ) : (
-          <div className="result-list">
-            {results.map((result) => (
-              <article className="result-row" key={result.ply}>
-                <div className="move-cell">
-                  <span>{moveNumber(result.ply)}</span>
-                  <strong>{result.san}</strong>
-                </div>
-                <div>
-                  <small>White evaluation</small>
-                  <strong className="evaluation">{formatScore(result)}</strong>
-                </div>
-                <div>
-                  <small>Engine choice</small>
-                  <code>{result.bestMoveUci}</code>
-                </div>
-                <div className="line-cell">
-                  <small>Principal variation</small>
-                  <code>
-                    {result.lines[0]?.movesUci.slice(0, 6).join(' ') || 'No line returned'}
-                  </code>
-                </div>
-              </article>
-            ))}
+          <div className="review-layout">
+            {selectedResult && (
+              <Chessboard
+                result={selectedResult}
+                assessment={assessMove(selectedResult)}
+                canGoPrevious={selectedIndex > 0}
+                canGoNext={selectedIndex < results.length - 1}
+                onPrevious={() => setSelectedPly(results[selectedIndex - 1]?.ply ?? selectedPly)}
+                onNext={() => setSelectedPly(results[selectedIndex + 1]?.ply ?? selectedPly)}
+              />
+            )}
+            <div className="result-list" aria-label="Analysed moves">
+              {results.map((result) => {
+                const assessment = assessMove(result);
+                return (
+                  <button
+                    className={`result-row ${selectedResult?.ply === result.ply ? 'result-selected' : ''}`}
+                    key={result.ply}
+                    onClick={() => setSelectedPly(result.ply)}
+                  >
+                    <div className="move-cell">
+                      <span>{moveNumber(result.ply)}</span>
+                      <strong>{result.san}</strong>
+                    </div>
+                    <div>
+                      <small>Assessment</small>
+                      <strong className={`move-label label-${assessment.label.toLowerCase()}`}>
+                        {assessment.label}
+                      </strong>
+                    </div>
+                    <div>
+                      <small>Loss</small>
+                      <strong className="evaluation">
+                        {assessment.centipawnLoss === undefined
+                          ? 'Mate'
+                          : `${(assessment.centipawnLoss / 100).toFixed(2)}`}
+                      </strong>
+                    </div>
+                    <div>
+                      <small>Better move</small>
+                      <code>{moveToSan(result.fen, result.bestMoveUci)}</code>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
 
@@ -379,8 +416,8 @@ export function App() {
         <p className="step">WHAT THIS DOES NOT CLAIM YET</p>
         <h2>Calculation is working. Coaching comes next.</h2>
         <p>
-          These are raw Stockfish facts, not yet mistake labels or explanations. Motifs, peer
-          comparisons and recurring-weakness lessons remain behind their own accuracy experiments.
+          These labels describe immediate engine loss using transparent thresholds. They do not yet
+          explain the chess motif, compare the move with peers, or prove a recurring weakness.
         </p>
       </section>
 

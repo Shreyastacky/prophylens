@@ -33,6 +33,7 @@ export interface PositionAnalysis {
   sideToMove: SideToMove;
   bestMoveUci: string;
   lines: EngineLine[];
+  playedLine: EngineLine;
 }
 
 export interface AnalysisSettings {
@@ -41,7 +42,7 @@ export interface AnalysisSettings {
 }
 
 export interface AnalysisRun {
-  schemaVersion: 1;
+  schemaVersion: 2;
   createdAt: string;
   pgnSha256: string;
   game: {
@@ -61,6 +62,7 @@ export interface AnalysisRun {
     hashMb: 16;
     nodesPerPosition: number;
     multiPv: number;
+    classifierVersion: 'move-loss-v1';
   };
   positions: PositionAnalysis[];
 }

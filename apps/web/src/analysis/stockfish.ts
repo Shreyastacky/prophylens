@@ -120,32 +120,51 @@ export class StockfishClient {
     await this.initialize();
     if (signal.aborted) throw abortError();
 
-    const lines = new Map<number, EngineLine>();
-    let bestMove = '';
-    this.createWorker().postMessage(`setoption name MultiPV value ${settings.multiPv}`);
-    this.createWorker().postMessage(position.positionCommand);
+    const search = async (
+      multiPv: number,
+      searchMove?: string,
+    ): Promise<{
+      bestMove: string;
+      lines: EngineLine[];
+    }> => {
+      const lines = new Map<number, EngineLine>();
+      let bestMove = '';
+      this.createWorker().postMessage(`setoption name MultiPV value ${multiPv}`);
+      this.createWorker().postMessage(position.positionCommand);
+      const command = `go nodes ${settings.nodes}${searchMove ? ` searchmoves ${searchMove}` : ''}`;
 
-    await this.commandUntil(
-      `go nodes ${settings.nodes}`,
-      (line) => {
-        const parsedBestMove = parseBestMove(line);
-        if (parsedBestMove) bestMove = parsedBestMove;
-        return line.startsWith('bestmove ');
-      },
-      {
-        timeoutMs: POSITION_TIMEOUT_MS,
-        signal,
-        onLine: (line) => {
-          const parsed = parseInfoLine(line);
-          if (!parsed) return;
-          const previous = lines.get(parsed.rank);
-          if (!previous || parsed.depth >= previous.depth) lines.set(parsed.rank, parsed);
-          onNodes(parsed.nodes);
+      await this.commandUntil(
+        command,
+        (line) => {
+          const parsedBestMove = parseBestMove(line);
+          if (parsedBestMove) bestMove = parsedBestMove;
+          return line.startsWith('bestmove ');
         },
-      },
-    );
+        {
+          timeoutMs: POSITION_TIMEOUT_MS,
+          signal,
+          onLine: (line) => {
+            const parsed = parseInfoLine(line);
+            if (!parsed) return;
+            const previous = lines.get(parsed.rank);
+            if (!previous || parsed.depth >= previous.depth) lines.set(parsed.rank, parsed);
+            onNodes((searchMove ? settings.nodes : 0) + parsed.nodes);
+          },
+        },
+      );
 
-    if (!bestMove) throw new Error(`Stockfish returned no legal move at ply ${position.ply}.`);
+      return { bestMove, lines: [...lines.values()].sort((a, b) => a.rank - b.rank) };
+    };
+
+    const bestSearch = await search(settings.multiPv);
+    const playedSearch =
+      bestSearch.bestMove === position.moveUci
+        ? { bestMove: position.moveUci, lines: [bestSearch.lines[0]!] }
+        : await search(1, position.moveUci);
+
+    if (!bestSearch.bestMove || !bestSearch.lines[0] || !playedSearch.lines[0]) {
+      throw new Error(`Stockfish returned incomplete evidence at ply ${position.ply}.`);
+    }
 
     return {
       ply: position.ply,
@@ -153,8 +172,9 @@ export class StockfishClient {
       playedMoveUci: position.moveUci,
       fen: position.fen,
       sideToMove: position.sideToMove,
-      bestMoveUci: bestMove,
-      lines: [...lines.values()].sort((a, b) => a.rank - b.rank),
+      bestMoveUci: bestSearch.bestMove,
+      lines: bestSearch.lines,
+      playedLine: playedSearch.lines[0],
     };
   }
 

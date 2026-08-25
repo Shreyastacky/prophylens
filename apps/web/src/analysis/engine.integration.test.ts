@@ -13,6 +13,7 @@ describe('Stockfish 18 browser distribution', () => {
       let sentUci = false;
       let sentReady = false;
       let sentSearch = false;
+      let sentForcedSearch = false;
 
       const timeout = setTimeout(() => {
         engine.kill();
@@ -47,7 +48,12 @@ describe('Stockfish 18 browser distribution', () => {
           engine.stdin.write('position startpos moves e2e4 e7e5\n');
           engine.stdin.write('go nodes 1000\n');
         }
-        if (sentSearch && /bestmove\s+[a-h][1-8][a-h][1-8]/.test(output)) finish();
+        if (sentSearch && !sentForcedSearch && /bestmove\s+[a-h][1-8][a-h][1-8]/.test(output)) {
+          sentForcedSearch = true;
+          engine.stdin.write('position startpos\n');
+          engine.stdin.write('go nodes 1000 searchmoves f2f3\n');
+        }
+        if (sentForcedSearch && output.includes('bestmove f2f3')) finish();
       });
     });
 
@@ -56,5 +62,6 @@ describe('Stockfish 18 browser distribution', () => {
     expect(transcript).toContain('readyok');
     expect(transcript).toMatch(/info depth \d+.*nodes \d+.*pv /);
     expect(transcript).toMatch(/bestmove\s+[a-h][1-8][a-h][1-8]/);
+    expect(transcript).toContain('bestmove f2f3');
   }, 35_000);
 });
