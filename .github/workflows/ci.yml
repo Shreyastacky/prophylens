@@ -20,3 +20,16 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
+      - name: Install Chromium for browser tests
+        run: npx playwright install --with-deps chromium
+      - name: Run browser journey tests
+        run: npm run test:e2e
+      - name: Upload browser test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-test-evidence
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
