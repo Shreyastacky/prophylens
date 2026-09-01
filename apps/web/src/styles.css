@@ -158,6 +158,38 @@ select {
   display: grid;
   gap: 12px;
 }
+.file-import {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.file-import > span {
+  overflow: hidden;
+  color: #9eaaa0;
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-button {
+  position: relative;
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  cursor: pointer;
+}
+.file-button input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.file-button:focus-within {
+  outline: 2px solid #b8f154;
+  outline-offset: 2px;
+}
 .pgn-field > span {
   color: #cbd6cd;
   font-weight: 700;
@@ -516,6 +548,10 @@ footer {
   }
   .hero {
     padding: 58px 0;
+  }
+  .file-import {
+    align-items: stretch;
+    flex-direction: column;
   }
   .results-header {
     align-items: stretch;

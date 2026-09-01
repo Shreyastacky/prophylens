@@ -22,7 +22,7 @@ Play -> diagnose -> practise -> re-test -> measure improvement
 
 ## Status
 
-**Pre-alpha / first-review stage.** The browser can parse a PGN, reconstruct every decision position, run Stockfish 18 locally in a background worker, compare the engine move with the move played, show a navigable board, apply versioned move-loss labels, cancel/restart analysis, and save or download a reproducible evidence receipt. Hardware benchmarking, calibrated classification, peer calibration, motifs, and training are not complete.
+**Pre-alpha / first-review stage.** The browser can paste or locally import a PGN, reconstruct every decision position, run Stockfish 18 in a background worker, compare the engine move with the move played, show a navigable board, apply versioned move-loss labels, cancel/restart analysis, and save or download a reproducible evidence receipt. Hardware benchmarking, calibrated classification, peer calibration, motifs, and training are not complete.
 
 ## User system requirements
 

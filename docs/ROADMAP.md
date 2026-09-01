@@ -17,7 +17,7 @@
 
 ## 2. Review MVP
 
-- [ ] PGN file/paste import and sanitisation
+- [x] PGN file/paste import and sanitisation
 - [ ] Board, move list, keyboard navigation, and accessible controls
 - [ ] Stockfish worker, progress, pause, cancel, crash recovery
 - [ ] Evaluation/WDL graph and legal principal variations

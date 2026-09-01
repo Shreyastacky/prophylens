@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 
 import { assessMove } from './analysis/classification';
 import { parseGame } from './analysis/pgn';
@@ -14,6 +14,8 @@ const examplePgn = `[Event "Example"]
 [Result "*"]
 
 1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 *`;
+
+const MAX_PGN_FILE_BYTES = 2 * 1024 * 1024;
 
 type EngineStatus = 'idle' | 'loading' | 'ready' | 'analysing' | 'cancelled' | 'complete' | 'error';
 
@@ -50,6 +52,8 @@ export function App() {
   const [selectedPly, setSelectedPly] = useState<number | null>(null);
   const [run, setRun] = useState<AnalysisRun | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [importedFileName, setImportedFileName] = useState<string | null>(null);
   const [progress, setProgress] = useState<ProgressState>({
     completed: 0,
     total: 0,
@@ -102,6 +106,46 @@ export function App() {
   const ensureClient = () => {
     if (!clientRef.current) clientRef.current = new StockfishClient();
     return clientRef.current;
+  };
+
+  const replacePgn = (nextPgn: string, fileName: string | null) => {
+    setPgn(nextPgn);
+    setImportedFileName(fileName);
+    setFileError(null);
+    setErrorMessage(null);
+    setResults([]);
+    setSelectedPly(null);
+    setRun(null);
+    setProgress({ completed: 0, total: 0, nodes: 0, move: '' });
+    setStatus(clientRef.current ? 'ready' : 'idle');
+  };
+
+  const importPgnFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith('.pgn')) {
+      setFileError('Choose a file ending in .pgn.');
+      return;
+    }
+    if (file.size > MAX_PGN_FILE_BYTES) {
+      setFileError('That PGN is larger than the 2 MB safety limit.');
+      return;
+    }
+
+    try {
+      const contents = await file.text();
+      parseGame(contents);
+      replacePgn(contents, file.name);
+    } catch (error) {
+      setFileError(
+        error instanceof Error
+          ? `Could not import this PGN: ${error.message}`
+          : 'Could not import this PGN.',
+      );
+    }
   };
 
   const restartEngine = async () => {
@@ -274,11 +318,34 @@ export function App() {
         </div>
 
         <div className="import-panel">
+          <div className="file-import">
+            <label className="secondary-button file-button">
+              <input
+                type="file"
+                accept=".pgn,application/x-chess-pgn"
+                aria-label="Choose PGN file"
+                onChange={importPgnFile}
+                disabled={status === 'analysing' || status === 'loading'}
+              />
+              Choose .pgn file
+            </label>
+            <span>
+              {importedFileName
+                ? `${importedFileName} loaded locally`
+                : 'Maximum 2 MB · never uploaded'}
+            </span>
+          </div>
+          {fileError && (
+            <small className="parse-error" role="alert">
+              {fileError}
+            </small>
+          )}
+
           <label className="pgn-field">
             <span>PGN</span>
             <textarea
               value={pgn}
-              onChange={(event) => setPgn(event.target.value)}
+              onChange={(event) => replacePgn(event.target.value, null)}
               spellCheck="false"
               disabled={status === 'analysing' || status === 'loading'}
             />
