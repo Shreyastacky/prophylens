@@ -67,6 +67,10 @@ Use IndexedDB for games, evidence, reviews, settings, drills, and cached peer da
 - Treat provider APIs as optional adapters; PGN always works offline.
 - No engine endpoint is exposed as an unauthenticated arbitrary command runner.
 
+## Error convention
+
+Functions that interpret observed data (a clock comment, a time control, a peer sample) return a null-or-undetermined result with a reason; unknown inputs are an expected data condition during ingestion. Functions that construct a query or assert an invariant throw; reaching them with invalid input is a caller bug, and a silent `null` there would be read downstream as "no peer data" rather than "invalid request." See the convention comment in `packages/contracts/src/index.ts`.
+
 ## Reproducibility
 
 Every saved review references:
