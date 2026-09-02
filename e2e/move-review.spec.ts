@@ -34,6 +34,13 @@ test('analyses a game and connects the results to the chessboard', async ({ page
   await expect(page.locator('.square-played')).toHaveCount(2);
   await expect(page.locator('.square-best')).toHaveCount(2);
   await expect(page.locator('.board-summary > div').first().getByText('1. f3')).toBeVisible();
+  await expect(page.getByText('Biggest miss')).toBeVisible();
+  await expect(page.getByText('0.41')).toBeVisible();
+
+  await page.getByRole('button', { name: /Key moments 1/ }).click();
+  await expect(page.locator('.result-row')).toHaveCount(1);
+  await expect(page.getByText('1 moves shown')).toBeVisible();
+  await page.getByRole('button', { name: /All moves 2/ }).click();
 
   await page.getByRole('button', { name: 'Next →' }).click();
   await expect(page.locator('.board-summary > div').first().getByText('1… e5')).toBeVisible();
@@ -82,4 +89,25 @@ test('cancels an active analysis promptly and allows recovery', async ({ page })
   await page.getByRole('button', { name: 'Cancel' }).click();
   await expect(page.getByText('Analysis cancelled')).toBeVisible({ timeout: 2_000 });
   await expect(page.getByRole('button', { name: 'Restart engine' })).toBeEnabled();
+});
+
+test('keeps the completed review usable on a phone-sized screen', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await page.getByRole('textbox', { name: /PGN/ }).fill(shortGame);
+  await page.getByRole('button', { name: 'Analyse game' }).click();
+  await expect(page.getByText('Analysis complete')).toBeVisible({ timeout: 120_000 });
+
+  await expect(page.locator('.board-square')).toHaveCount(64);
+  await expect(page.getByText('Biggest miss')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+
+  const screenshotPath = testInfo.outputPath('mobile-move-review.png');
+  await page.screenshot({ path: screenshotPath, fullPage: true });
+  await testInfo.attach('mobile move review', {
+    path: screenshotPath,
+    contentType: 'image/png',
+  });
 });

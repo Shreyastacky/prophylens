@@ -1,6 +1,6 @@
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 
-import { assessMove } from './analysis/classification';
+import { assessMove, type MoveAssessment } from './analysis/classification';
 import { parseGame } from './analysis/pgn';
 import { downloadAnalysis, saveLastAnalysis, sha256 } from './analysis/storage';
 import { StockfishClient } from './analysis/stockfish';
@@ -18,6 +18,7 @@ const examplePgn = `[Event "Example"]
 const MAX_PGN_FILE_BYTES = 2 * 1024 * 1024;
 
 type EngineStatus = 'idle' | 'loading' | 'ready' | 'analysing' | 'cancelled' | 'complete' | 'error';
+type ReviewFilter = 'all' | 'key';
 
 interface ProgressState {
   completed: number;
@@ -43,6 +44,16 @@ function statusLabel(status: EngineStatus): string {
   return labels[status];
 }
 
+function formatLoss(assessment: MoveAssessment): string {
+  return assessment.centipawnLoss === undefined
+    ? 'Mate'
+    : `${(assessment.centipawnLoss / 100).toFixed(2)}`;
+}
+
+function severityScore(assessment: MoveAssessment): number {
+  return assessment.expectedScoreLoss ?? (assessment.centipawnLoss ?? 0) / 1000;
+}
+
 export function App() {
   const [pgn, setPgn] = useState(examplePgn);
   const [settings, setSettings] = useState<AnalysisSettings>({ nodes: 10_000, multiPv: 2 });
@@ -54,6 +65,7 @@ export function App() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [importedFileName, setImportedFileName] = useState<string | null>(null);
+  const [reviewFilter, setReviewFilter] = useState<ReviewFilter>('all');
   const [progress, setProgress] = useState<ProgressState>({
     completed: 0,
     total: 0,
@@ -116,6 +128,7 @@ export function App() {
     setResults([]);
     setSelectedPly(null);
     setRun(null);
+    setReviewFilter('all');
     setProgress({ completed: 0, total: 0, nodes: 0, move: '' });
     setStatus(clientRef.current ? 'ready' : 'idle');
   };
@@ -178,6 +191,7 @@ export function App() {
     setResults([]);
     setSelectedPly(null);
     setRun(null);
+    setReviewFilter('all');
     setErrorMessage(null);
     setStatus('loading');
     setProgress({ completed: 0, total: parsed.game.positions.length, nodes: 0, move: '' });
@@ -229,6 +243,13 @@ export function App() {
 
       saveLastAnalysis(finishedRun);
       setRun(finishedRun);
+      const mostCostly = completedResults.reduce<PositionAnalysis | null>((worst, result) => {
+        if (!worst) return result;
+        return severityScore(assessMove(result)) > severityScore(assessMove(worst))
+          ? result
+          : worst;
+      }, null);
+      setSelectedPly(mostCostly?.ply ?? null);
       setStatus('complete');
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {
@@ -249,11 +270,42 @@ export function App() {
       100
     : 0;
 
+  const reviewedResults = useMemo(
+    () => results.map((result) => ({ result, assessment: assessMove(result) })),
+    [results],
+  );
+  const keyReviews = reviewedResults.filter(
+    ({ assessment }) => assessment.label !== 'Best' && assessment.label !== 'Good',
+  );
+  const visibleReviews = reviewFilter === 'key' ? keyReviews : reviewedResults;
   const selectedIndex = Math.max(
     0,
-    results.findIndex((result) => result.ply === selectedPly),
+    visibleReviews.findIndex(({ result }) => result.ply === selectedPly),
   );
-  const selectedResult = results[selectedIndex] ?? null;
+  const selectedReview = visibleReviews[selectedIndex] ?? null;
+  const selectedResult = selectedReview?.result ?? null;
+  const averageLoss =
+    reviewedResults.length === 0
+      ? 0
+      : reviewedResults.reduce(
+          (total, { assessment }) => total + (assessment.centipawnLoss ?? 0),
+          0,
+        ) / reviewedResults.length;
+  const largestLoss = reviewedResults.reduce<(typeof reviewedResults)[number] | null>(
+    (largest, review) =>
+      !largest || severityScore(review.assessment) > severityScore(largest.assessment)
+        ? review
+        : largest,
+    null,
+  );
+
+  const changeReviewFilter = (filter: ReviewFilter) => {
+    setReviewFilter(filter);
+    const nextReviews = filter === 'key' ? keyReviews : reviewedResults;
+    if (!nextReviews.some(({ result }) => result.ply === selectedPly)) {
+      setSelectedPly(nextReviews[0]?.result.ply ?? null);
+    }
+  };
 
   return (
     <main>
@@ -268,21 +320,37 @@ export function App() {
       </nav>
 
       <section className="hero" id="top">
-        <div className="eyebrow">PRIVATE. TRANSPARENT. NOW CALCULATING.</div>
-        <h1>Analyse a complete game on your own computer.</h1>
-        <p>
-          Paste a finished game. ProphyLens rebuilds every position and asks Stockfish for objective
-          evidence in a background worker, so the page stays responsive and the PGN stays local.
-        </p>
+        <div className="hero-copy">
+          <div className="eyebrow">PRIVATE CHESS REVIEW</div>
+          <h1>Find the moves that changed your game.</h1>
+          <p>
+            Import a finished game and compare every move with Stockfish—without sending the PGN
+            away from your device.
+          </p>
+        </div>
+        <div className="hero-proof" aria-label="Product principles">
+          <div>
+            <strong>Local</strong>
+            <span>Your game stays in this browser</span>
+          </div>
+          <div>
+            <strong>Explainable</strong>
+            <span>Every label keeps its engine evidence</span>
+          </div>
+          <div>
+            <strong>Open source</strong>
+            <span>Inspect the code and the calculation receipt</span>
+          </div>
+        </div>
       </section>
 
       <section className="workspace" aria-labelledby="import-heading">
         <div>
           <p className="step">01 / IMPORT AND CALCULATE</p>
-          <h2 id="import-heading">Start with a finished game</h2>
+          <h2 id="import-heading">Import your game</h2>
           <p className="muted">
-            A node is one position inspected by Stockfish. More nodes improve stability but take
-            longer. MultiPV controls how many candidate lines are saved.
+            Start with Quick analysis. Increase the node budget only when you want a slower, more
+            stable second opinion.
           </p>
 
           <div className="settings" aria-label="Analysis settings">
@@ -419,53 +487,93 @@ export function App() {
             No engine evidence yet. Analyse the sample game above to start.
           </p>
         ) : (
-          <div className="review-layout">
-            {selectedResult && (
-              <Chessboard
-                result={selectedResult}
-                assessment={assessMove(selectedResult)}
-                canGoPrevious={selectedIndex > 0}
-                canGoNext={selectedIndex < results.length - 1}
-                onPrevious={() => setSelectedPly(results[selectedIndex - 1]?.ply ?? selectedPly)}
-                onNext={() => setSelectedPly(results[selectedIndex + 1]?.ply ?? selectedPly)}
-              />
-            )}
-            <div className="result-list" aria-label="Analysed moves">
-              {results.map((result) => {
-                const assessment = assessMove(result);
-                return (
-                  <button
-                    className={`result-row ${selectedResult?.ply === result.ply ? 'result-selected' : ''}`}
-                    key={result.ply}
-                    onClick={() => setSelectedPly(result.ply)}
-                  >
-                    <div className="move-cell">
-                      <span>{moveNumber(result.ply)}</span>
-                      <strong>{result.san}</strong>
-                    </div>
-                    <div>
-                      <small>Assessment</small>
-                      <strong className={`move-label label-${assessment.label.toLowerCase()}`}>
-                        {assessment.label}
-                      </strong>
-                    </div>
-                    <div>
-                      <small>Loss</small>
-                      <strong className="evaluation">
-                        {assessment.centipawnLoss === undefined
-                          ? 'Mate'
-                          : `${(assessment.centipawnLoss / 100).toFixed(2)}`}
-                      </strong>
-                    </div>
-                    <div>
-                      <small>Better move</small>
-                      <code>{moveToSan(result.fen, result.bestMoveUci)}</code>
-                    </div>
-                  </button>
-                );
-              })}
+          <>
+            <div className="review-summary" aria-label="Analysis summary">
+              <article>
+                <span>Key moments</span>
+                <strong>{keyReviews.length}</strong>
+                <small>Inaccuracies, mistakes and blunders</small>
+              </article>
+              <article>
+                <span>Average loss</span>
+                <strong>{(averageLoss / 100).toFixed(2)}</strong>
+                <small>Pawns lost per move</small>
+              </article>
+              <article>
+                <span>Biggest miss</span>
+                <strong>{largestLoss?.result.san ?? '—'}</strong>
+                <small>
+                  {largestLoss ? `${formatLoss(largestLoss.assessment)} pawns` : 'No result yet'}
+                </small>
+              </article>
             </div>
-          </div>
+
+            <div className="review-toolbar">
+              <div className="segmented-control" aria-label="Move filter">
+                <button
+                  aria-pressed={reviewFilter === 'all'}
+                  onClick={() => changeReviewFilter('all')}
+                >
+                  All moves <span>{reviewedResults.length}</span>
+                </button>
+                <button
+                  aria-pressed={reviewFilter === 'key'}
+                  onClick={() => changeReviewFilter('key')}
+                  disabled={keyReviews.length === 0}
+                >
+                  Key moments <span>{keyReviews.length}</span>
+                </button>
+              </div>
+              <span>{visibleReviews.length} moves shown</span>
+            </div>
+
+            <div className="review-layout">
+              {selectedResult && (
+                <Chessboard
+                  result={selectedResult}
+                  assessment={selectedReview!.assessment}
+                  canGoPrevious={selectedIndex > 0}
+                  canGoNext={selectedIndex < visibleReviews.length - 1}
+                  onPrevious={() =>
+                    setSelectedPly(visibleReviews[selectedIndex - 1]?.result.ply ?? selectedPly)
+                  }
+                  onNext={() =>
+                    setSelectedPly(visibleReviews[selectedIndex + 1]?.result.ply ?? selectedPly)
+                  }
+                />
+              )}
+              <div className="result-list" aria-label="Analysed moves">
+                {visibleReviews.map(({ result, assessment }) => {
+                  return (
+                    <button
+                      className={`result-row ${selectedResult?.ply === result.ply ? 'result-selected' : ''}`}
+                      key={result.ply}
+                      onClick={() => setSelectedPly(result.ply)}
+                    >
+                      <div className="move-cell">
+                        <span>{moveNumber(result.ply)}</span>
+                        <strong>{result.san}</strong>
+                      </div>
+                      <div>
+                        <small>Assessment</small>
+                        <strong className={`move-label label-${assessment.label.toLowerCase()}`}>
+                          {assessment.label}
+                        </strong>
+                      </div>
+                      <div>
+                        <small>Loss</small>
+                        <strong className="evaluation">{formatLoss(assessment)}</strong>
+                      </div>
+                      <div>
+                        <small>Better move</small>
+                        <code>{moveToSan(result.fen, result.bestMoveUci)}</code>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </>
         )}
 
         {run && (
