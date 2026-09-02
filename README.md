@@ -22,7 +22,7 @@ Play -> diagnose -> practise -> re-test -> measure improvement
 
 ## Status
 
-**Pre-alpha / spike stage.** The repository contains a runnable web shell, typed domain contracts, transparent scoring primitives, tests, and the product/architecture decisions needed to run three go/no-go experiments before full UI development.
+**Pre-alpha / first-review stage.** The browser can paste or locally import a PGN, reconstruct every decision position, run Stockfish 18 in a background worker, compare the engine move with the move played, show a navigable board, apply versioned move-loss labels, cancel/restart analysis, and save or download a reproducible evidence receipt. Hardware benchmarking, calibrated classification, peer calibration, motifs, and training are not complete.
 
 ## User system requirements
 
@@ -78,6 +78,17 @@ Quality checks:
 npm run check
 ```
 
+What the current page proves:
+
+- Stockfish loads from the same web application and responds through UCI.
+- Analysis runs in a Web Worker instead of freezing the interface.
+- Every position uses the complete game history leading to the player's decision.
+- The node budget and number of candidate lines are visible and configurable.
+- Results include engine version, neural-network identity, settings, source revision, and binary checksums.
+- The latest completed analysis remains in local browser storage and can be downloaded as JSON.
+
+The current rows are raw engine evidence. They deliberately do not call moves blunders or claim to explain why a move failed yet.
+
 ## Go/no-go spikes
 
 Full product development starts only after these pass:
@@ -94,7 +105,7 @@ See [docs/SPIKES.md](docs/SPIKES.md), [docs/PRODUCT_DIRECTION.md](docs/PRODUCT_D
 apps/web/              React/Vite product shell
 packages/contracts/    Shared evidence, peer, diagnosis, and provenance types
 docs/                  Product, algorithm, privacy, data, and architecture specs
-public/engine/         Stockfish distribution boundary (no binary committed yet)
+public/engine/         Pinned Stockfish 18 browser build, licence, checksums, and source pointer
 .github/               CI, contribution, and issue templates
 ```
 
@@ -109,7 +120,7 @@ public/engine/         Stockfish distribution boundary (no binary committed yet)
 
 ## Licensing
 
-ProphyLens is licensed under **AGPL-3.0-or-later**. Stockfish is GPL-3.0, Maia-3 is AGPL-3.0, and third-party components retain their own licences. No Stockfish or Maia binary/model is committed in this initial scaffold. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and [docs/LICENSING.md](docs/LICENSING.md).
+ProphyLens is licensed under **AGPL-3.0-or-later**. The included Stockfish.js 18 lite single-threaded browser build is GPL-3.0; its licence, exact checksums, release, corresponding source, and build instructions are recorded under `public/engine/`. Maia-3 is not included. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and [docs/LICENSING.md](docs/LICENSING.md).
 
 ## Contributing
 

@@ -4,6 +4,9 @@ Do these before building the complete review UI. Each spike ends in measured evi
 
 ## A. Engine spike
 
+Implementation and remaining measurement work are tracked in
+[docs/ENGINE_SPIKE.md](ENGINE_SPIKE.md).
+
 **Goal:** prove local Stockfish is responsive, reproducible enough, and deployable.
 
 Build:

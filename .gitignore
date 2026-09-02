@@ -9,7 +9,11 @@ coverage/
 .DS_Store
 Thumbs.db
 npm-debug.log*
+playwright-report/
+test-results/
 CHESSMUAH_CONVERSATION.md
 public/engine/*.js
 public/engine/*.wasm
 public/engine/*.nnue
+!public/engine/stockfish-18-lite-single.js
+!public/engine/stockfish-18-lite-single.wasm

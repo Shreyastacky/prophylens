@@ -3,6 +3,7 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   plugins: [react()],
+  publicDir: '../../public',
   server: {
     headers: {
       'Cross-Origin-Embedder-Policy': 'require-corp',

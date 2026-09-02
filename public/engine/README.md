@@ -1,18 +1,29 @@
-# Engine assets
+# Stockfish browser engine
 
-No engine binary is committed in the initial scaffold.
+This directory distributes the lite, single-threaded browser build from
+[Stockfish.js 18.0.0](https://github.com/nmrugg/stockfish.js/releases/tag/v18.0.0).
+It runs inside a Web Worker, so analysis does not block the interface.
 
-The engine spike should begin with the pinned `stockfish@18.0.8` package and its lite, single-threaded browser build:
+## Included files
 
-- `stockfish-18-lite-single.js`
-- `stockfish-18-lite-single.wasm`
+| File | SHA-256 |
+| --- | --- |
+| `stockfish-18-lite-single.js` | `2278005057f381491f1c9bb3e44c9f5920b3a00bef9759e33cc6582769a1f1fe` |
+| `stockfish-18-lite-single.wasm` | `a8fbc05ec6920b56d7485826dcb02c5ffd2826bcbf751cf973046f237a9096f1` |
+| `COPYING.txt` | `0b383d5a63da644f628d99c33976ea6487ed89aaa59f0b3257992deac1171e6b` |
 
-Before a binary is distributed from this directory, the same change must include:
+The release identifies upstream Stockfish commit
+[`cb3d4ee`](https://github.com/official-stockfish/Stockfish/commit/cb3d4ee). The complete
+corresponding Stockfish.js source and build instructions are available at the exact
+[`v18.0.0` source tag](https://github.com/nmrugg/stockfish.js/tree/v18.0.0).
 
-1. Stockfish's GPL-3.0 licence notice.
-2. Exact upstream version and binary checksum.
-3. Corresponding source or a durable offer/pointer plus reproducible build instructions.
-4. An updated `THIRD_PARTY_NOTICES.md`.
-5. A test proving the worker loads and responds to `uci` and `isready`.
+## Licence
 
-The threaded build additionally requires cross-origin isolation headers. The Vite development and preview configuration already sets those headers, but production hosting must be verified separately.
+Stockfish and Stockfish.js are GPL-3.0. The bundled licence text is in `COPYING.txt`.
+ProphyLens is AGPL-3.0-or-later, which is compatible with this distribution.
+
+## Why this build
+
+The lite build is roughly 7 MB and remains much stronger than the intended users. The
+single-threaded version works without cross-origin isolation, which gives the initial spike a
+reliable fallback. A future measured experiment may add the stronger multi-threaded build.
