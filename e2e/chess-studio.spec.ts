@@ -63,3 +63,46 @@ test('preview board stays square, loads every piece and fits narrow and wide scr
     expect(result.loaded, `piece artwork at ${width}px`).toBe(true);
   }
 });
+
+test('waits for the current PGN before analysis and allows reloading the same sample', async ({
+  page,
+  context,
+}) => {
+  await page.goto('/');
+  const analyse = page.getByRole('button', { name: 'Analyse game' });
+  await expect(analyse).toBeEnabled();
+  let release = () => {};
+  let requested = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const workerRequest = new Promise<void>((resolve) => {
+    requested = resolve;
+  });
+  await context.route('**/assets/pgn.worker-*.js', async (route) => {
+    requested();
+    await held;
+    await route.continue();
+  });
+  await page.getByRole('textbox', { name: /PGN/ }).fill('1. c4 e5 *');
+  await page.getByRole('textbox', { name: /PGN/ }).fill('1. d4 d5 *');
+  try {
+    await workerRequest;
+    await expect(analyse).toBeDisabled();
+    await expect(page.getByText('Checking your game…')).toBeVisible();
+    await expect(page.getByText('Engine idle', { exact: true })).toBeVisible();
+  } finally {
+    release();
+  }
+  await expect(analyse).toBeEnabled();
+  await analyse.click();
+  await expect(page.getByText('Analysis complete', { exact: true })).toBeVisible({
+    timeout: 120_000,
+  });
+  await expect(page.locator('.result-row')).toHaveCount(2);
+  await expect(page.locator('.board-summary > div').first().getByText('1. d4')).toBeVisible();
+  await page.getByRole('button', { name: 'Load sample' }).click();
+  await expect(analyse).toBeEnabled();
+  await page.getByRole('button', { name: 'Load sample' }).click();
+  await expect(analyse).toBeEnabled();
+});

@@ -5,6 +5,10 @@ import { variationSteps } from './analysis/variation';
 import type { ParsedGame } from './analysis/types';
 
 const initialFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+function playerName(game: ParsedGame | null, side: 'White' | 'Black') {
+  const name = game?.headers[side]?.trim();
+  return name && name !== '?' ? name : side;
+}
 export function GamePreview({ game }: { game: ParsedGame | null }) {
   const [step, setStep] = useState(0);
   const [flipped, setFlipped] = useState(false);
@@ -25,7 +29,7 @@ export function GamePreview({ game }: { game: ParsedGame | null }) {
       <div className="board-top">
         <span className="board-player">
           <span className="player-dot player-white" />
-          {game?.headers.White ?? 'White'}
+          {playerName(game, 'White')}
         </span>
         <button
           className="text-button"
@@ -36,7 +40,7 @@ export function GamePreview({ game }: { game: ParsedGame | null }) {
         </button>
         <span className="board-player">
           <span className="player-dot player-black" />
-          {game?.headers.Black ?? 'Black'}
+          {playerName(game, 'Black')}
         </span>
       </div>
       <div className="board-frame">
