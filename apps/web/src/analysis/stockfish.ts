@@ -3,7 +3,7 @@ import { ENGINE_ASSET } from './types';
 import { parseBestMove, parseInfoLine } from './uci';
 import { legalVariation } from './variation';
 
-const INITIALIZATION_TIMEOUT_MS = 30_000;
+const INITIALIZATION_TIMEOUT_MS = 90_000;
 const POSITION_TIMEOUT_MS = 120_000;
 
 function abortError(): DOMException {

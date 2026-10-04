@@ -28,7 +28,19 @@ test('analyses a game and connects the results to the chessboard', async ({ page
   const consoleErrors: string[] = [];
   const failedRequests: string[] = [];
   page.on('console', (message) => {
-    if (message.type() === 'error') consoleErrors.push(message.text());
+    // Sites' edge protection may emit a Firefox cookie-domain diagnostic.
+    // Keep all application errors visible; record this exact provider diagnostic separately.
+    if (message.type() === 'error') {
+      if (
+        process.env.PUBLIC_BASE_URL &&
+        message.text().includes('Cookie “__cf_bm” has been rejected for invalid domain.')
+      ) {
+        void testInfo.attach('hosting cookie diagnostic', {
+          body: message.text(),
+          contentType: 'text/plain',
+        });
+      } else consoleErrors.push(message.text());
+    }
   });
   page.on('requestfailed', (request) => {
     failedRequests.push(`${request.method()} ${request.url()}: ${request.failure()?.errorText}`);

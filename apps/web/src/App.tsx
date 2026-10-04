@@ -751,9 +751,9 @@ export function App() {
         <h2>Study locally. Keep control.</h2>
         <p>
           Games, reviews and practice attempts stay in this browser's IndexedDB. No accounts,
-          trackers or PGN uploads. The hosting provider receives ordinary page and asset requests,
-          including IP and request metadata. Browser data is not encrypted against someone with
-          access to your device.
+          analytics or PGN uploads. The hosting provider may use security cookies and bot-protection
+          scripts, and receives ordinary page and asset requests, including IP and request metadata.
+          Browser data is not encrypted against someone with access to your device.
         </p>
         <details>
           <summary>Privacy, accuracy and fair play</summary>

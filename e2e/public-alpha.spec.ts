@@ -67,7 +67,7 @@ test('cancel, restart and repeated analysis recover without duplicate games', as
   await expect(page.getByText('Analysis cancelled')).toBeVisible({ timeout: 2000 });
   expect(Date.now() - start).toBeLessThan(2000);
   await page.getByRole('button', { name: 'Restart engine' }).click();
-  await expect(page.getByText('Engine ready')).toBeVisible();
+  await expect(page.getByText('Engine ready')).toBeVisible({ timeout: 90_000 });
   await page.getByLabel('Nodes per position').selectOption('10000');
   await page.getByRole('textbox', { name: /PGN/ }).fill('1. e4 e5 *');
   for (let i = 0; i < 2; i++) {

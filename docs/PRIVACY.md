@@ -1,6 +1,6 @@
 # Privacy: public alpha 0.1.0
 
-The application makes same-origin requests for its page, scripts and Stockfish assets. The Sites hosting provider receives ordinary connection metadata, including IP addresses and request information. ProphyLens has no analytics SDK, accounts, advertising, cloud game database or online peer lookup.
+The application makes same-origin requests for its page, scripts and Stockfish assets. The Sites hosting provider receives ordinary connection metadata, including IP addresses and request information. The hosting edge may use security cookies and bot-protection scripts. ProphyLens has no analytics SDK, accounts, advertising, cloud game database or online peer lookup.
 
 PGNs, headers, engine reviews, settings, timestamps, selected player and practice attempts remain in this browser's IndexedDB. A prior version's latest localStorage receipt is migrated only after successful validation and persistence; failed migration preserves the original record.
 
