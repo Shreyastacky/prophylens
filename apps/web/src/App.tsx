@@ -450,7 +450,7 @@ export function App() {
         Skip to game import
       </a>
       <nav className="nav" aria-label="Primary navigation">
-        <a className="brand" href="#top" aria-label="ProphyLens ALPHA home">
+        <a className="brand" href="#top">
           <span className="brand-mark" aria-hidden="true">
             P
           </span>
