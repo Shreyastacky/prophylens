@@ -79,6 +79,16 @@ export function peerClaimEligibility(
   const rule = EVIDENCE_RULES[claim];
   const reasons: string[] = [];
 
+  if (
+    !Number.isSafeInteger(evidence.sampleSize) ||
+    evidence.sampleSize < 0 ||
+    (evidence.successes !== undefined &&
+      (!Number.isFinite(evidence.successes) ||
+        evidence.successes < 0 ||
+        evidence.successes > evidence.sampleSize))
+  )
+    return { eligible: false, reasons: ['Invalid sample size or outcome count'] };
+
   if (evidence.sampleSize < rule.minSamples) {
     reasons.push(`sample ${evidence.sampleSize} below ${rule.minSamples} required for "${claim}"`);
   }
@@ -129,6 +139,16 @@ export const LESSON_GATES = {
  */
 export function lessonEligibility(evidence: LessonEvidence): EligibilityResult {
   const reasons: string[] = [];
+  if (
+    ![evidence.occurrences, evidence.affectedGames].every(
+      (n) => Number.isSafeInteger(n) && n >= 0,
+    ) ||
+    !Number.isFinite(evidence.motifConfidence) ||
+    evidence.motifConfidence < 0 ||
+    evidence.motifConfidence > 1 ||
+    evidence.affectedGames > evidence.occurrences
+  )
+    return { eligible: false, reasons: ['Invalid lesson counts or confidence'] };
 
   if (!evidence.motifValidated) {
     reasons.push('motif rule has not passed its precision benchmark');
@@ -172,5 +192,7 @@ export function lessonEligibility(evidence: LessonEvidence): EligibilityResult {
  * ordering it is meant to produce.
  */
 export function expectedLessonValue(priority: number, motifConfidence: number): number {
+  if (!Number.isFinite(priority) || priority < 0 || !Number.isFinite(motifConfidence))
+    throw new RangeError('Lesson value inputs must be finite and nonnegative');
   return priority * clamp01(motifConfidence);
 }

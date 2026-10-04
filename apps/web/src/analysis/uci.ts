@@ -32,10 +32,19 @@ export function parseInfoLine(message: string): EngineLine | null {
   if (selectiveDepth !== undefined) parsed.selectiveDepth = selectiveDepth;
   if (scoreKind === 'cp' && Number.isFinite(scoreValue)) parsed.scoreCp = scoreValue;
   if (scoreKind === 'mate' && Number.isFinite(scoreValue)) parsed.mateIn = scoreValue;
+  parsed.scoreBound = tokens.includes('lowerbound')
+    ? 'lower'
+    : tokens.includes('upperbound')
+      ? 'upper'
+      : 'exact';
 
   if (wdlIndex !== -1) {
     const values = tokens.slice(wdlIndex + 1, wdlIndex + 4).map(Number);
-    if (values.length === 3 && values.every(Number.isFinite)) {
+    if (
+      values.length === 3 &&
+      values.every((n) => Number.isInteger(n) && n >= 0 && n <= 1000) &&
+      values.reduce((sum, n) => sum + n, 0) === 1000
+    ) {
       parsed.wdl = { win: values[0]!, draw: values[1]!, loss: values[2]! };
     }
   }

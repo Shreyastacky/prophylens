@@ -21,6 +21,7 @@ export interface EngineLine {
   nodes: number;
   scoreCp?: number;
   mateIn?: number;
+  scoreBound?: 'exact' | 'lower' | 'upper';
   wdl?: { win: number; draw: number; loss: number };
   movesUci: string[];
 }
@@ -42,7 +43,8 @@ export interface AnalysisSettings {
 }
 
 export interface AnalysisRun {
-  schemaVersion: 2;
+  schemaVersion: 3;
+  pgn: string;
   createdAt: string;
   pgnSha256: string;
   game: {
@@ -62,9 +64,28 @@ export interface AnalysisRun {
     hashMb: 16;
     nodesPerPosition: number;
     multiPv: number;
-    classifierVersion: 'move-loss-v1';
+    classifierVersion: 'move-loss-v1' | 'move-loss-v2';
+    appVersion: string;
+    sourceRevision: string;
   };
   positions: PositionAnalysis[];
+}
+
+export type PlayerSide = SideToMove | 'both';
+export interface PracticeAttempt {
+  ply: number;
+  moveUci: string;
+  correct: boolean;
+  attemptedAt: string;
+}
+export interface LibraryGame {
+  schemaVersion: 1;
+  id: string;
+  pgn: string;
+  analysis: AnalysisRun;
+  player: PlayerSide;
+  updatedAt: string;
+  attempts: PracticeAttempt[];
 }
 
 export const ENGINE_ASSET = {

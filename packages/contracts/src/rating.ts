@@ -41,6 +41,8 @@ export interface ExplorerBucketMapping {
 
 /** Lower bound of the bucket an individual rating falls into. */
 export function bucketForRating(elo: number): LichessExplorerBucket {
+  if (!Number.isFinite(elo) || elo < 0)
+    throw new RangeError('Rating must be finite and nonnegative');
   let chosen: LichessExplorerBucket = LICHESS_EXPLORER_BUCKETS[0];
   for (const bucket of LICHESS_EXPLORER_BUCKETS) {
     if (elo >= bucket) chosen = bucket;
@@ -63,6 +65,12 @@ export function bucketUpperEdge(bucket: LichessExplorerBucket): number | null {
  * made. Callers must handle other platforms explicitly.
  */
 export function toExplorerBuckets(range: RatingRange): ExplorerBucketMapping {
+  if (
+    !Number.isFinite(range.min) ||
+    range.min < 0 ||
+    (range.max !== null && (!Number.isFinite(range.max) || range.max < range.min))
+  )
+    throw new RangeError('Rating bounds must be finite, nonnegative and ordered');
   if (range.platform !== 'lichess') {
     throw new Error(
       `no verified rating mapping from platform "${range.platform}" to Lichess ` +

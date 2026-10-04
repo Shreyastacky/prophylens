@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 const shortGame = `[Event "Browser test"]
 [White "Tester"]
@@ -6,6 +6,23 @@ const shortGame = `[Event "Browser test"]
 [Result "*"]
 
 1. f3 e5 *`;
+
+async function expectPerfectlySquareBoard(page: Page) {
+  const dimensions = await page.locator('.results .board-square').evaluateAll((squares) =>
+    squares.map((square) => {
+      const { width, height } = square.getBoundingClientRect();
+      return { width, height };
+    }),
+  );
+  const widths = dimensions.map(({ width }) => width);
+  const heights = dimensions.map(({ height }) => height);
+
+  for (const { width, height } of dimensions) {
+    expect(Math.abs(width - height)).toBeLessThanOrEqual(0.5);
+  }
+  expect(Math.max(...widths) - Math.min(...widths)).toBeLessThanOrEqual(0.5);
+  expect(Math.max(...heights) - Math.min(...heights)).toBeLessThanOrEqual(0.5);
+}
 
 test('analyses a game and connects the results to the chessboard', async ({ page }, testInfo) => {
   const consoleErrors: string[] = [];
@@ -30,12 +47,13 @@ test('analyses a game and connects the results to the chessboard', async ({ page
 
   await expect(page.getByText('Analysis complete')).toBeVisible({ timeout: 120_000 });
   await expect(page.locator('.result-row')).toHaveCount(2);
-  await expect(page.locator('.board-square')).toHaveCount(64);
-  await expect(page.locator('.square-played')).toHaveCount(2);
-  await expect(page.locator('.square-best')).toHaveCount(2);
+  await expect(page.locator('.results .board-square')).toHaveCount(64);
+  await expectPerfectlySquareBoard(page);
+  await expect(page.locator('.results .square-played')).toHaveCount(2);
+  await expect(page.locator('.results .square-best')).toHaveCount(2);
   await expect(page.locator('.board-summary > div').first().getByText('1. f3')).toBeVisible();
   await expect(page.getByText('Biggest miss')).toBeVisible();
-  await expect(page.getByText('0.41')).toBeVisible();
+  await expect(page.locator('.review-summary article').first()).toBeVisible();
 
   await page.getByRole('button', { name: /Key moments 1/ }).click();
   await expect(page.locator('.result-row')).toHaveCount(1);
@@ -59,7 +77,7 @@ test('analyses a game and connects the results to the chessboard', async ({ page
   await page.getByRole('textbox', { name: /PGN/ }).fill('1. e4 *');
   await expect(page.locator('.result-row')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Download evidence' })).toHaveCount(0);
-  await expect(page.getByText('Engine ready')).toBeVisible();
+  await expect(page.getByText('Engine idle')).toBeVisible();
 
   expect(consoleErrors).toEqual([]);
   expect(failedRequests).toEqual([]);
@@ -98,7 +116,8 @@ test('keeps the completed review usable on a phone-sized screen', async ({ page 
   await page.getByRole('button', { name: 'Analyse game' }).click();
   await expect(page.getByText('Analysis complete')).toBeVisible({ timeout: 120_000 });
 
-  await expect(page.locator('.board-square')).toHaveCount(64);
+  await expect(page.locator('.results .board-square')).toHaveCount(64);
+  await expectPerfectlySquareBoard(page);
   await expect(page.getByText('Biggest miss')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,

@@ -1,32 +1,11 @@
-# Move review classification
+# Move review — move-loss-v2
 
-**Status:** first deterministic review layer; thresholds require calibration before public accuracy claims.
+Each decision uses an unrestricted Stockfish search and, when needed, a search restricted to the played move. Searches share the position/history, node limit, engine and mover score perspective. Hash is cleared before each search. When the played move is the engine choice, its evidence is reused.
 
-ProphyLens now performs two searches from each decision position:
+The client preserves score bounds and legal principal variations. It prefers the last completed exact evaluation for the final root move; its recorded depth is retained. If exact evidence is unavailable, the move is Uncertain. A node limit may interrupt the next iteration, so completed comparisons can have different depths. No confidence is inferred from node count alone.
 
-1. an unrestricted search for Stockfish's preferred move;
-2. a `searchmoves` search that forces Stockfish to examine the move the player actually chose.
+Expected-score loss from valid WDL is preferred. Without WDL, pawn loss uses explicit thresholds. Losing a winning mate or allowing a losing mate is a Blunder; mate lines are excluded from pawn-loss averages. The graph shows White's perspective with gaps for unknown scores.
 
-Both evaluations therefore use the same position, engine, node budget and score perspective. When the played move is already Stockfish's first choice, the first result is reused.
+Labels are Best, Good, Inaccuracy, Mistake, Blunder or Uncertain. Confidence is low below depth 12 and medium at/above it; this is a search-depth signal, not empirical diagnostic accuracy. Thresholds are in apps/web/src/analysis/classification.ts and require human corpus calibration before accuracy claims.
 
-## Version 1 labels
-
-`move-loss-v1` primarily uses the change in Stockfish's expected score derived from its win/draw/loss output:
-
-| Label      |                                            Expected-score loss |
-| ---------- | -------------------------------------------------------------: |
-| Best       | Engine choice, or at most 0.01 with at most 10 centipawns lost |
-| Good       |                                                  At most 0.015 |
-| Inaccuracy |                               More than 0.015 and at most 0.06 |
-| Mistake    |                                More than 0.06 and at most 0.18 |
-| Blunder    |                                                 More than 0.18 |
-
-Centipawn thresholds of 20, 60 and 150 are a fallback when WDL is unavailable. Negative losses caused by search noise are clamped to zero.
-
-These labels are not intended to reproduce Chess.com or Lichess classifications. They describe immediate engine loss only. They do not yet account for position complexity, forcedness, clock time, peer behaviour or recurring motifs.
-
-## Evidence and future calibration
-
-The downloadable evidence stores both the unrestricted candidate lines and the forced played-move line. It also records `classifierVersion: move-loss-v1` so later threshold changes do not silently alter the meaning of old results.
-
-Before these labels are presented as calibrated coaching judgements, test them against a reviewed position set across ratings, game phases and node budgets. Report disagreement and boundary instability rather than tuning thresholds to imitate another site's private system.
+Receipts retain raw evidence and provenance. Legacy move-loss-v1 receipts can be imported; the current UI reinterprets evidence using v2 and names this explicitly. Best-move practice checks the recorded engine choice and does not certify a unique winning move.
