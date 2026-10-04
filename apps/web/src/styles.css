@@ -495,7 +495,6 @@ textarea {
   font-size: 0.76rem;
   font-weight: 550;
   text-decoration: none;
-  transition: opacity 180ms ease;
 }
 .primary-button {
   background: #225fb0;
