@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@phosphor-icons/react": "2.1.10",
     "@prophylens/contracts": "*",
     "chess.js": "^1.4.0",
     "react": "^19.1.1",

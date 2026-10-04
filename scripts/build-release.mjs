@@ -25,6 +25,7 @@ for (const name of ['react', 'react-dom', 'chess.js']) {
   if (!license) throw new Error('Missing licence for ' + name);
   cpSync(join(folder, license), join('dist/licenses', name + '.txt'));
 }
+cpSync('node_modules/@phosphor-icons/react/LICENSE', 'dist/licenses/phosphor-icons-react.txt');
 const assets = {};
 function collect(folder) {
   for (const entry of readdirSync(folder, { withFileTypes: true })) {

@@ -30,6 +30,11 @@ import {
 } from './analysis/types';
 import { Review } from './Review';
 import { Practice } from './Practice';
+import { Appearance } from './Appearance';
+import { GamePreview } from './GamePreview';
+import { ShieldCheck } from '@phosphor-icons/react/dist/csr/ShieldCheck';
+import { UploadSimple } from '@phosphor-icons/react/dist/csr/UploadSimple';
+import { ArrowUpRight } from '@phosphor-icons/react/dist/csr/ArrowUpRight';
 const examplePgn =
   '[Event "Sample game"]\n[White "You"]\n[Black "Training Partner"]\n[Result "0-1"]\n\n1. f3 e5 2. g4 Qh4# 0-1';
 type Status = 'idle' | 'loading' | 'ready' | 'analysing' | 'cancelled' | 'complete' | 'error';
@@ -74,8 +79,17 @@ export function App() {
   const clientRef = useRef<StockfishClient | null>(null),
     abortRef = useRef<AbortController | null>(null),
     operation = useRef(0);
+  const focusReview = useRef(false);
   const [importing, setImporting] = useState(false);
   const busy = importing || status === 'loading' || status === 'analysing';
+  const showReview = results.length > 0 && !busy;
+  useEffect(() => {
+    if (!showReview || status !== 'complete' || !focusReview.current) return;
+    focusReview.current = false;
+    const heading = document.getElementById('results-heading');
+    heading?.scrollIntoView({ block: 'start', behavior: 'instant' });
+    heading?.focus({ preventScroll: true });
+  }, [showReview, status]);
   function openGame(game: LibraryGame) {
     operation.current++;
     abortRef.current?.abort();
@@ -235,6 +249,7 @@ export function App() {
   }
   async function analyse() {
     if (!parsed || busy || !libraryReady) return;
+    focusReview.current = true;
     const token = ++operation.current,
       abort = new AbortController();
     abortRef.current = abort;
@@ -435,7 +450,7 @@ export function App() {
         Skip to game import
       </a>
       <nav className="nav" aria-label="Primary navigation">
-        <a className="brand" href="#top" aria-label="ProphyLens home">
+        <a className="brand" href="#top" aria-label="ProphyLens ALPHA home">
           <span className="brand-mark" aria-hidden="true">
             P
           </span>
@@ -446,6 +461,7 @@ export function App() {
         <div className="nav-links">
           <a href="#library">Library</a>
           <a href="#practice">Practice</a>
+          <Appearance />
           <span className={`status status-${status}`} role="status">
             {labels[status]}
           </span>
@@ -453,149 +469,189 @@ export function App() {
       </nav>
       <section className="hero" id="top">
         <div className="hero-copy">
-          <div className="eyebrow">PRIVATE CHESS REVIEW</div>
+          <div className="eyebrow">YOUR PRIVATE CHESS STUDIO</div>
           <h1>Find the moves that changed your game.</h1>
           <p>
             Review completed games with Stockfish, keep your work in this browser, and practise the
             moves you missed.
           </p>
+          <a className="studio-shortcut secondary-button" href="#import-heading">
+            New review <ArrowUpRight size={15} aria-hidden="true" />
+          </a>
         </div>
-        <div className="hero-proof" aria-label="Product principles">
-          <div>
-            <strong>Local</strong>
-            <span>Your PGN stays on your device</span>
-          </div>
-          <div>
-            <strong>Inspectable</strong>
-            <span>Play through the engine evidence</span>
-          </div>
-          <div>
-            <strong>Yours</strong>
-            <span>Reopen, export and delete your games</span>
-          </div>
+        <div className="privacy-chip">
+          <ShieldCheck size={18} aria-hidden="true" />
+          <span>
+            On your device.
+            <br />
+            <strong>In your control.</strong>
+          </span>
         </div>
       </section>
-      <section className="workspace" aria-labelledby="import-heading">
-        <div>
-          <p className="step">01 / IMPORT AND CALCULATE</p>
-          <h2 id="import-heading">Import your game</h2>
-          <p className="muted">
-            Start with Quick analysis. For close decisions, use a deeper second opinion. Standard
-            chess · post-game study only.
-          </p>
-          <div className="settings" aria-label="Analysis settings">
-            <label>
-              Nodes per position
-              <select
-                value={settings.nodes}
-                onChange={(e) => setSettings((s) => ({ ...s, nodes: Number(e.target.value) }))}
-                disabled={busy}
-              >
-                <option value="10000">10,000 · quick</option>
-                <option value="50000">50,000 · balanced</option>
-                <option value="100000">100,000 · deeper</option>
-              </select>
-            </label>
-            <label>
-              Candidate lines
-              <select
-                value={settings.multiPv}
-                onChange={(e) => setSettings((s) => ({ ...s, multiPv: Number(e.target.value) }))}
-                disabled={busy}
-              >
-                <option value="1">1 line</option>
-                <option value="2">2 lines</option>
-                <option value="3">3 lines</option>
-              </select>
-            </label>
-          </div>
-        </div>
-        <div className="import-panel">
-          <div className="file-import">
-            <label className="secondary-button file-button">
-              <input
-                type="file"
-                accept=".pgn,application/x-chess-pgn"
-                aria-label="Choose PGN file"
-                onChange={(e) => void importPgn(e)}
-                disabled={busy || !libraryReady}
-              />
-              Choose .pgn file
-            </label>
-            <span>
-              {fileName
-                ? `${fileName} loaded locally`
-                : 'Maximum 2 MB · up to 100 games · never uploaded'}
-            </span>
-          </div>
-          {fileError && (
-            <small className="parse-error" role="alert">
-              {fileError}
-            </small>
-          )}
-          <label className="pgn-field">
-            <span>PGN</span>
-            <textarea
-              value={pgn}
-              onChange={(e) => replacePgn(e.target.value, null)}
-              spellCheck={false}
-              disabled={busy}
-              maxLength={MAX_PGN_BYTES}
-            />
-            <small className={parseError ? 'parse-error' : 'parse-ok'}>
-              {validating
-                ? 'Checking your game…'
-                : (parseError ??
-                  `${parsed?.positions.length ?? 0} half-moves ready for local analysis`)}
-            </small>
-          </label>
-          <div className="actions">
-            <button
-              className="primary-button"
-              onClick={() => void analyse()}
-              disabled={!parsed || validating || busy || !libraryReady}
-            >
-              Analyse game
-            </button>
-            {busy ? (
-              <button className="secondary-button" onClick={cancel}>
-                Cancel
-              </button>
-            ) : (
-              <>
-                <button className="secondary-button" onClick={() => void restart()}>
-                  Restart engine
+      <div className={`studio-stage ${showReview ? 'has-review' : 'is-preview'}`}>
+        <section className="results" aria-labelledby="results-heading">
+          <div className="results-header">
+            <div>
+              <p className="step">{showReview ? 'Move review' : 'Game preview'}</p>
+              <h2 id="results-heading" tabIndex={-1}>
+                {showReview ? 'See what changed when you moved.' : 'Your board. Your next insight.'}
+              </h2>
+            </div>
+            {run && (
+              <div className="actions">
+                <button className="secondary-button" onClick={() => downloadAnalysis(run)}>
+                  Download evidence
                 </button>
-                <button className="text-button" onClick={() => replacePgn(examplePgn, null)}>
-                  Load sample
+                <button className="text-button" onClick={() => downloadPgn(run)}>
+                  Export PGN
                 </button>
-              </>
+              </div>
             )}
           </div>
-          {busy && (
-            <div className="progress-panel" aria-live="polite">
-              <div>
-                <span>
-                  {status === 'loading' ? 'Loading the 7 MB engine' : `Analysing ${progress.move}`}
-                </span>
-                <span>
-                  {progress.completed}/{progress.total} positions
-                </span>
-              </div>
-              <progress aria-label="Analysis progress" value={progressPercent} max="100" />
-              <small>
-                Game {progress.game}/{progress.count} · {progress.nodes.toLocaleString()} nodes in
-                this position
-              </small>
+          {showReview ? (
+            <Review results={results} player={player} onPlayer={changePlayer} />
+          ) : (
+            <GamePreview game={parsed} />
+          )}
+          {run && showReview && (
+            <div className="receipt">
+              <strong>Analysis receipt</strong>
+              <span>{run.provenance.engineVersion}</span>
+              <span>{run.provenance.nodesPerPosition.toLocaleString()} nodes per position</span>
+              <span>MultiPV {run.provenance.multiPv}</span>
+              <span>Current labels: move-loss-v2</span>
+              <span>
+                {games.some((g) => g.id === active?.id)
+                  ? 'Saved locally in this browser'
+                  : 'In memory · download to keep'}
+              </span>
             </div>
           )}
-          {error && (
-            <p className="error-box" role="alert">
-              {error}
+        </section>
+        <section className="workspace" aria-labelledby="import-heading">
+          <div>
+            <p className="step">A NEW REVIEW</p>
+            <h2 id="import-heading">Import your game</h2>
+            <p className="muted">
+              Start with Quick analysis. For close decisions, use a deeper second opinion. Standard
+              chess · post-game study only.
             </p>
-          )}
-        </div>
-      </section>
+            <div className="settings" aria-label="Analysis settings">
+              <label>
+                Nodes per position
+                <select
+                  value={settings.nodes}
+                  onChange={(e) => setSettings((s) => ({ ...s, nodes: Number(e.target.value) }))}
+                  disabled={busy}
+                >
+                  <option value="10000">10,000 · quick</option>
+                  <option value="50000">50,000 · balanced</option>
+                  <option value="100000">100,000 · deeper</option>
+                </select>
+              </label>
+              <label>
+                Candidate lines
+                <select
+                  value={settings.multiPv}
+                  onChange={(e) => setSettings((s) => ({ ...s, multiPv: Number(e.target.value) }))}
+                  disabled={busy}
+                >
+                  <option value="1">1 line</option>
+                  <option value="2">2 lines</option>
+                  <option value="3">3 lines</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          <div className="import-panel">
+            <div className="file-import">
+              <label className="secondary-button file-button">
+                <input
+                  type="file"
+                  accept=".pgn,application/x-chess-pgn"
+                  aria-label="Choose PGN file"
+                  onChange={(e) => void importPgn(e)}
+                  disabled={busy || !libraryReady}
+                />
+                <UploadSimple size={17} aria-hidden="true" /> Choose .pgn file
+              </label>
+              <span>
+                {fileName
+                  ? `${fileName} loaded locally`
+                  : 'Maximum 2 MB · up to 100 games · never uploaded'}
+              </span>
+            </div>
+            {fileError && (
+              <small className="parse-error" role="alert">
+                {fileError}
+              </small>
+            )}
+            <label className="pgn-field">
+              <span>PGN</span>
+              <textarea
+                value={pgn}
+                onChange={(e) => replacePgn(e.target.value, null)}
+                spellCheck={false}
+                disabled={busy}
+                maxLength={MAX_PGN_BYTES}
+              />
+              <small className={parseError ? 'parse-error' : 'parse-ok'}>
+                {validating
+                  ? 'Checking your game…'
+                  : (parseError ??
+                    `${parsed?.positions.length ?? 0} half-moves ready for local analysis`)}
+              </small>
+            </label>
+            <div className="actions">
+              <button
+                className="primary-button"
+                onClick={() => void analyse()}
+                disabled={!parsed || validating || busy || !libraryReady}
+              >
+                Analyse game <ArrowUpRight size={17} aria-hidden="true" />
+              </button>
+              {busy ? (
+                <button className="secondary-button" onClick={cancel}>
+                  Cancel
+                </button>
+              ) : (
+                <>
+                  <button className="secondary-button" onClick={() => void restart()}>
+                    Restart engine
+                  </button>
+                  <button className="text-button" onClick={() => replacePgn(examplePgn, null)}>
+                    Load sample
+                  </button>
+                </>
+              )}
+            </div>
+            {busy && (
+              <div className="progress-panel" aria-live="polite">
+                <div>
+                  <span>
+                    {status === 'loading'
+                      ? 'Loading the 7 MB engine'
+                      : `Analysing ${progress.move}`}
+                  </span>
+                  <span>
+                    {progress.completed}/{progress.total} positions
+                  </span>
+                </div>
+                <progress aria-label="Analysis progress" value={progressPercent} max="100" />
+                <small>
+                  Game {progress.game}/{progress.count} · {progress.nodes.toLocaleString()} nodes in
+                  this position
+                </small>
+              </div>
+            )}
+            {error && (
+              <p className="error-box" role="alert">
+                {error}
+              </p>
+            )}
+          </div>
+        </section>
+      </div>
       {warning && (
         <p className="storage-warning" role="alert">
           {warning}
@@ -609,47 +665,10 @@ export function App() {
           {notice}
         </p>
       )}
-      <section className="results" aria-labelledby="results-heading">
-        <div className="results-header">
-          <div>
-            <p className="step">02 / MOVE REVIEW</p>
-            <h2 id="results-heading">See what changed when you moved.</h2>
-          </div>
-          {run && (
-            <div className="actions">
-              <button className="secondary-button" onClick={() => downloadAnalysis(run)}>
-                Download evidence
-              </button>
-              <button className="text-button" onClick={() => downloadPgn(run)}>
-                Export PGN
-              </button>
-            </div>
-          )}
-        </div>
-        {results.length ? (
-          <Review results={results} player={player} onPlayer={changePlayer} />
-        ) : (
-          <p className="empty-state">Analyse the sample above or open a saved game to start.</p>
-        )}
-        {run && (
-          <div className="receipt">
-            <strong>Analysis receipt</strong>
-            <span>{run.provenance.engineVersion}</span>
-            <span>{run.provenance.nodesPerPosition.toLocaleString()} nodes per position</span>
-            <span>MultiPV {run.provenance.multiPv}</span>
-            <span>Current labels: move-loss-v2</span>
-            <span>
-              {games.some((g) => g.id === active?.id)
-                ? 'Saved locally in this browser'
-                : 'In memory · download to keep'}
-            </span>
-          </div>
-        )}
-      </section>
       <section id="library" className="library-section" aria-labelledby="library-heading">
         <div className="results-header">
           <div>
-            <p className="step">03 / YOUR LOCAL LIBRARY</p>
+            <p className="step">YOUR LOCAL LIBRARY</p>
             <h2 id="library-heading">Your games, ready when you return.</h2>
           </div>
           <div className="actions">
@@ -721,7 +740,10 @@ export function App() {
                 <button
                   className="secondary-button"
                   disabled={busy}
-                  onClick={() => openGame(game)}
+                  onClick={() => {
+                    focusReview.current = true;
+                    openGame(game);
+                  }}
                   aria-label={`Open ${game.analysis.game.headers.White ?? 'White'} vs ${game.analysis.game.headers.Black ?? 'Black'}`}
                 >
                   Open review
@@ -747,7 +769,6 @@ export function App() {
       </section>
       <Practice games={games} onAttempt={recordAttempt} />
       <section className="next-layer" id="privacy">
-        <p className="step">PRIVATE BY DEFAULT</p>
         <h2>Study locally. Keep control.</h2>
         <p>
           Games, reviews and practice attempts stay in this browser's IndexedDB. No accounts,
@@ -778,6 +799,7 @@ export function App() {
           <a href="https://github.com/Shreyastacky/prophylens/issues/new/choose">Feedback</a>
           <a href="https://github.com/Shreyastacky/prophylens">Source · AGPL-3.0-or-later</a>
           <a href="/engine/COPYING.txt">Stockfish licence</a>
+          <a href="/THIRD_PARTY_NOTICES.txt">Asset licences</a>
         </div>
       </footer>
     </main>

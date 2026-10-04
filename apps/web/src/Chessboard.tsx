@@ -1,22 +1,9 @@
 import { useMemo, useState, useEffect } from 'react';
 import { Chess } from 'chess.js';
+import { ArrowsClockwise } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
 import { formatLoss, type MoveAssessment } from './analysis/classification';
 import { variationSteps } from './analysis/variation';
 import type { PositionAnalysis } from './analysis/types';
-const pieces = {
-  wp: '♙',
-  wn: '♘',
-  wb: '♗',
-  wr: '♖',
-  wq: '♕',
-  wk: '♔',
-  bp: '♟',
-  bn: '♞',
-  bb: '♝',
-  br: '♜',
-  bq: '♛',
-  bk: '♚',
-} as const;
 const pieceNames = {
   p: 'pawn',
   n: 'knight',
@@ -64,7 +51,7 @@ export function Board({
       aria-label={
         onSquare
           ? 'Practice board. Select a piece and then its destination.'
-          : 'Chess position. Pink marks the played move and blue marks the engine choice.'
+          : 'Chess position. Amber marks the played move and blue marks the engine choice.'
       }
     >
       {squares.map(({ piece, square }, index) => {
@@ -85,7 +72,14 @@ export function Board({
             {index >= 56 && <span className="file-label">{square[0]}</span>}
             {piece && (
               <span className={`piece piece-${piece.color}`}>
-                {pieces[`${piece.color}${piece.type}`]}
+                <img
+                  src={`${import.meta.env.BASE_URL}pieces/${piece.color}${piece.type.toUpperCase()}.svg`}
+                  alt=""
+                  aria-hidden="true"
+                  draggable={false}
+                  width="80"
+                  height="80"
+                />
               </span>
             )}
           </>
@@ -167,15 +161,46 @@ export function Chessboard({
           onClick={() => setFlipped((v) => !v)}
           aria-label="Flip board"
         >
-          Flip board ↻
+          <ArrowsClockwise size={16} aria-hidden="true" /> Flip board
         </button>
       </div>
-      <Board
-        fen={displayFen}
-        orientation={actualOrientation}
-        playedMove={preview === 'before' ? result.playedMoveUci : ''}
-        bestMove={preview === 'before' ? result.bestMoveUci : ''}
-      />
+      <div className="board-view-toolbar">
+        <div className="segmented-control board-views" aria-label="Board view">
+          <button aria-pressed={preview === 'before'} onClick={() => setPreview('before')}>
+            Before move
+          </button>
+          <button aria-pressed={preview === 'played'} onClick={() => setPreview('played')}>
+            After played move
+          </button>
+          <button
+            aria-pressed={preview === 'line'}
+            onClick={() => {
+              setPreview('line');
+              setStep(1);
+            }}
+          >
+            Engine line
+          </button>
+        </div>
+      </div>
+      <div className="board-frame">
+        <Board
+          fen={displayFen}
+          orientation={actualOrientation}
+          playedMove={preview === 'before' ? result.playedMoveUci : ''}
+          bestMove={preview === 'before' ? result.bestMoveUci : ''}
+        />
+      </div>
+      <div className="board-navigation">
+        <div className="board-controls">
+          <button className="secondary-button" onClick={onPrevious} disabled={!canGoPrevious}>
+            ← Previous
+          </button>
+          <button className="secondary-button" onClick={onNext} disabled={!canGoNext}>
+            Next →
+          </button>
+        </div>
+      </div>
       <div className="board-summary">
         <div>
           <span className={`move-label label-${assessment.label.toLowerCase()}`}>
@@ -206,23 +231,6 @@ export function Chessboard({
           Engine choice
         </p>
         {assessment.reason && <p className="confidence-note">{assessment.reason}</p>}
-        <div className="segmented-control board-views" aria-label="Board view">
-          <button aria-pressed={preview === 'before'} onClick={() => setPreview('before')}>
-            Before move
-          </button>
-          <button aria-pressed={preview === 'played'} onClick={() => setPreview('played')}>
-            After played move
-          </button>
-          <button
-            aria-pressed={preview === 'line'}
-            onClick={() => {
-              setPreview('line');
-              setStep(1);
-            }}
-          >
-            Engine line
-          </button>
-        </div>
         {preview === 'line' && (
           <div className="variation-panel">
             <label>
@@ -271,14 +279,6 @@ export function Chessboard({
             </div>
           </div>
         )}
-        <div className="board-controls">
-          <button className="secondary-button" onClick={onPrevious} disabled={!canGoPrevious}>
-            ← Previous
-          </button>
-          <button className="secondary-button" onClick={onNext} disabled={!canGoNext}>
-            Next →
-          </button>
-        </div>
         <small>Left and right arrow keys follow the current move filter.</small>
       </div>
     </div>

@@ -72,7 +72,13 @@ test('analyses a game and connects the results to the chessboard', async ({ page
   await expect(page.getByText('1 moves shown')).toBeVisible();
   await page.getByRole('button', { name: /All moves 2/ }).click();
 
+  await page.getByRole('button', { name: 'Flip board', exact: true }).click();
   await page.getByRole('button', { name: 'Next →' }).click();
+  await expect(page.locator('.results .board-square').first()).toHaveAttribute(
+    'aria-label',
+    'White rook on h1',
+  );
+  await page.getByRole('button', { name: 'Flip board', exact: true }).click();
   await expect(page.locator('.board-summary > div').first().getByText('1… e5')).toBeVisible();
 
   await page.keyboard.press('ArrowLeft');

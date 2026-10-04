@@ -69,7 +69,7 @@ export function Practice({
   const attempts = games.flatMap((g) => g.attempts);
   return (
     <section id="practice" className="practice-section" aria-labelledby="practice-heading">
-      <p className="step">04 / PRACTISE YOUR POSITIONS</p>
+      <p className="step">PRACTISE YOUR POSITIONS</p>
       <h2 id="practice-heading">A second chance at your own mistakes.</h2>
       <p className="muted">
         Find the best move from your saved games. Practice tracks attempts; it does not claim a
