@@ -35,7 +35,8 @@ The board and move list remain opaque for contrast. Navigation, segmented contro
 the import surface use a diffuse backdrop, a subtle directional highlight and a fine rim.
 Unsupported blur and reduced-transparency modes use solid surfaces.
 
-The initial studio fades in. Buttons keep fixed hit areas and provide inset press
+The glass rim resolves gently on entry; text and hit areas are fully present from
+the first frame. Buttons keep fixed hit areas and provide inset press
 feedback; their icons move subtly on hover. The engine dot pulses only during loading or analysis.
 Every animation and transition is disabled for reduced motion.
 No continuous React render loop, scroll handler, new animation runtime or external font

@@ -1353,8 +1353,17 @@ footer {
     opacity: 1;
   }
 }
-.studio-stage {
-  animation: studio-enter 500ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+.nav::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 20px;
+  right: 20px;
+  height: 1px;
+  border-radius: 50%;
+  background: var(--highlight);
+  pointer-events: none;
+  animation: studio-enter 600ms ease-out both;
 }
 @media (max-width: 1060px) {
   main {
