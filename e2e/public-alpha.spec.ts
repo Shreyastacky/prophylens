@@ -18,6 +18,9 @@ test('library survives refresh, backup restore and practice; review is accessibl
   await page.getByRole('button', { name: 'Check move' }).click();
   await expect(page.getByText(/1 attempts saved/)).toBeVisible();
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await page.getByRole('button', { name: 'Switch to dark appearance' }).click();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await page.getByRole('button', { name: 'Switch to light appearance' }).click();
   await page.reload();
   await expect(page.getByText('Analysis complete')).toBeVisible();
   await expect(page.getByLabel('Review player')).toHaveValue('white');

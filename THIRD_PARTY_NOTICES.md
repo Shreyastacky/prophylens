@@ -26,3 +26,19 @@ Before distributing Stockfish, Maia, data packs, board artwork, fonts, icons, or
 - Upstream Stockfish revision: `cb3d4ee`.
 - Exact binary checksums are recorded in `public/engine/README.md` and in every exported
   ProphyLens analysis receipt.
+
+## Chessnut chess pieces
+
+- Author: Alexis Luengas.
+- Source: https://github.com/LexLuengas/chessnut-pieces/tree/2b8eaf14a31edad7e9deb53b1473e1d4857868a9
+- All twelve SVGs are bundled unchanged under `public/pieces/`.
+- Licence: Apache-2.0; the original licence is included at `public/pieces/LICENSE.txt`.
+- Exact asset SHA-256 values appear in the packaged `release.json`.
+- These pieces replace platform-dependent Unicode chess glyphs; no external image requests occur.
+
+## Phosphor Icons React 2.1.10
+
+- Copyright (c) 2020 Phosphor Icons.
+- Source: https://github.com/phosphor-icons/react
+- Licence: MIT; included in the release at `licenses/phosphor-icons-react.txt`.
+- Only the used icon exports are included by the production bundler.
