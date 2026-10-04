@@ -16,12 +16,26 @@ function clampUnit(value: number): number {
 }
 
 export function expectedPoints(wins: number, draws: number, total: number): number | null {
-  if (total <= 0) return null;
+  if (
+    ![wins, draws, total].every(Number.isFinite) ||
+    total <= 0 ||
+    wins < 0 ||
+    draws < 0 ||
+    wins + draws > total
+  )
+    return null;
   return (wins + draws * 0.5) / total;
 }
 
 export function wilsonInterval(successes: number, total: number, z = 1.96): Interval | null {
-  if (total <= 0 || successes < 0 || successes > total) return null;
+  if (
+    ![successes, total, z].every(Number.isFinite) ||
+    total <= 0 ||
+    z <= 0 ||
+    successes < 0 ||
+    successes > total
+  )
+    return null;
   const proportion = successes / total;
   const denominator = 1 + (z * z) / total;
   const centre = proportion + (z * z) / (2 * total);
@@ -36,6 +50,7 @@ export function acceptableMoveMass(
   moves: ReadonlyArray<{ moveUci: string; count: number }>,
   acceptableMoves: ReadonlySet<string>,
 ): number | null {
+  if (moves.some((move) => !Number.isSafeInteger(move.count) || move.count < 0)) return null;
   const total = moves.reduce((sum, move) => sum + Math.max(0, move.count), 0);
   if (total === 0) return null;
   const acceptable = moves.reduce(
@@ -95,6 +110,12 @@ export function lessonPriority(
   inputs: PriorityInputs,
   weights: PriorityWeights = DEFAULT_PRIORITY_WEIGHTS,
 ): PriorityResult {
+  if (
+    !Object.values(inputs).every(Number.isFinite) ||
+    !Object.values(weights).every((n) => Number.isFinite(n) && n >= 0) ||
+    Object.values(weights).every((n) => n === 0)
+  )
+    throw new RangeError('Priority factors and weights must be finite with positive total weight');
   const severity = clampUnit(inputs.severity);
   const factors: Array<[keyof PriorityInputs, number, number]> = [
     ['severity', severity, weights.severity],
@@ -120,6 +141,7 @@ export function lessonPriority(
 }
 
 export function movePopularity(count: number, total: number): number | null {
-  if (total <= 0) return null;
+  if (![count, total].every(Number.isFinite) || total <= 0 || count < 0 || count > total)
+    return null;
   return clampUnit(count / total);
 }

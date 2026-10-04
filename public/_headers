@@ -1,10 +1,15 @@
 /*
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: require-corp
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
 
-/engine/*.wasm
+/engine/stockfish-18-lite-single.wasm
   Content-Type: application/wasm
   Cache-Control: public, max-age=31536000, immutable
 
-/engine/*.js
+/engine/stockfish-18-lite-single.js
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/*
   Cache-Control: public, max-age=31536000, immutable

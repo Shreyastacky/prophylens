@@ -1,51 +1,23 @@
 # Roadmap
 
-## 0. Foundation
+## Public alpha 0.1.0
 
-- [x] Product thesis and non-goals
-- [x] Local-first architecture boundary
-- [x] Typed evidence/peer/review contracts
-- [x] Transparent scoring primitives and tests
-- [x] CI and open-source governance
+- [x] Standard PGN paste and bounded batch-file import
+- [x] Stockfish worker, visible budgets, progress, cancellation and restart
+- [x] Board, filtered keyboard navigation, player selection, evaluation timeline and legal variation playback
+- [x] Versioned move-loss labels with mate transitions, score bounds and uncertainty
+- [x] IndexedDB library, refresh recovery, deduplication, deletion, JSON backup/import and raw PGN export
+- [x] Practice positions from personal key moments, legal answer checking and persisted attempts
+- [x] Chromium/Firefox production journeys, automated accessibility checks and phone-size layout
+- [x] Pinned engine, bundled licences, SHA-256 release manifest and public-source link
 
-## 1. Go/no-go spikes
+## Before beta
 
-- [ ] Engine spike
-- [ ] Peer UX/coverage spike using existing Lichess explorer
-- [ ] Motif diagnosis spike
-- [ ] Written ADR for each result
+- [ ] Physical-device and Safari testing, slow-network and battery benchmarks
+- [ ] Human-reviewed label/explanation corpus and multi-budget stability benchmark
+- [ ] Validated recurring motif detection and proof visualisation
+- [ ] Delayed re-testing and improvement measurements
+- [ ] Peer-coverage and UX experiment before data-pipeline investment
+- [ ] PWA/offline installation and explicit cache/update behaviour
 
-## 2. Review MVP
-
-- [x] PGN file/paste import and sanitisation
-- [ ] Board, move list, keyboard navigation, and accessible controls
-- [ ] Stockfish worker, progress, pause, cancel, crash recovery
-- [ ] Evaluation/WDL graph and legal principal variations
-- [ ] Versioned basic classifications with confidence
-- [ ] Local history and annotated PGN export
-
-## 3. Improvement loop
-
-- [ ] Motif proof visualisation
-- [ ] Cross-game recurring weakness profile
-- [ ] Retry drills from personal games
-- [ ] Spaced review and recurrence measurement
-- [ ] One weekly training prescription
-
-## 4. Peer calibration
-
-- [ ] Explorer adapter and honest uncertainty UI
-- [ ] Static-index decision from measured spike results
-- [ ] Corpus ingestion/build pipeline if approved
-- [ ] Offline pack and privacy-reducing shard prototypes
-- [ ] Maia-3 browser feasibility/licensing spike if needed
-
-## 5. Public beta
-
-- [ ] Chess.com and Lichess public-game import adapters
-- [ ] Golden-games explanation benchmark
-- [ ] PWA/offline behaviour
-- [ ] Self-hosting documentation
-- [ ] Accessibility, browser, mobile, security, and licence QA
-
-Accounts, hosted sync, sharing, coach dashboards, and optional multilingual/LLM presentation remain post-demand decisions.
+See [Next steps](NEXT_STEPS.md) and [release evidence](RELEASE.md). Accounts, sync, sharing and LLM explanations require evidence of demand and separate privacy decisions.

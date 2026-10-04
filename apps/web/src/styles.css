@@ -1,7 +1,8 @@
 :root {
-  color: #e9efe9;
+  color: #f4f5fb;
   background:
-    radial-gradient(circle at 85% -10%, rgb(184 241 84 / 0.08), transparent 32rem), #0d140f;
+    radial-gradient(circle at 14% -8%, rgb(105 165 255 / 0.2), transparent 34rem),
+    radial-gradient(circle at 92% 5%, rgb(194 150 224 / 0.16), transparent 30rem), #090d18;
   font-family:
     Inter,
     ui-sans-serif,
@@ -12,6 +13,7 @@
     sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+  color-scheme: dark;
 }
 
 * {
@@ -24,6 +26,15 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  background:
+    radial-gradient(circle at 18% 12%, rgb(81 137 230 / 0.1), transparent 27rem),
+    radial-gradient(circle at 82% 18%, rgb(187 139 216 / 0.09), transparent 28rem),
+    linear-gradient(145deg, #090d18 0%, #0d1323 48%, #111020 100%);
+  background-attachment: fixed;
+}
+::selection {
+  color: #080b14;
+  background: #a9cfff;
 }
 a {
   color: inherit;
@@ -430,15 +441,21 @@ button:focus-visible {
 }
 .chessboard {
   display: grid;
-  grid-template-columns: repeat(8, 1fr);
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-template-rows: repeat(8, minmax(0, 1fr));
   width: 100%;
   aspect-ratio: 1;
+  overflow: hidden;
+  container-type: inline-size;
 }
 .board-square {
   position: relative;
   display: grid;
   place-items: center;
   min-width: 0;
+  min-height: 0;
+  aspect-ratio: 1;
+  overflow: hidden;
   color: #172019;
 }
 .square-light {
@@ -464,8 +481,11 @@ button:focus-visible {
 .piece {
   position: relative;
   z-index: 1;
+  max-width: 90%;
+  max-height: 90%;
   font-family: 'Segoe UI Symbol', 'Noto Sans Symbols 2', serif;
-  font-size: clamp(2rem, 5vw, 4.25rem);
+  font-size: clamp(1.65rem, 5vw, 4.25rem);
+  font-size: clamp(1.65rem, 9.5cqi, 4.25rem);
   line-height: 1;
   filter: drop-shadow(0 2px 1px rgb(0 0 0 / 0.28));
 }
@@ -635,6 +655,185 @@ footer {
   color: #849087;
   border-top: 1px solid #2d3930;
   font-size: 0.9rem;
+}
+
+/* Blue-mauve glass theme trial. Kept as a single override layer so it is easy to compare or remove. */
+.nav {
+  border-color: rgb(176 199 235 / 0.14);
+}
+.brand-mark {
+  color: #0a0d17;
+  background: linear-gradient(145deg, #8fc4ff, #c7a6df);
+  box-shadow: 0 8px 26px rgb(102 158 244 / 0.24);
+}
+.status,
+.step,
+.eyebrow,
+.parse-ok,
+.evaluation,
+.label-best,
+.label-good {
+  color: #91c6ff;
+}
+.status {
+  background: rgb(13 20 36 / 0.7);
+  border-color: rgb(121 174 244 / 0.35);
+  box-shadow: inset 0 1px rgb(255 255 255 / 0.04);
+}
+.hero,
+.results,
+footer {
+  border-color: rgb(176 199 235 / 0.14);
+}
+.hero-copy > p,
+.next-layer > p,
+.muted,
+.legend,
+.receipt {
+  color: #aeb8cd;
+}
+.hero-proof,
+.workspace,
+.import-panel,
+.progress-panel,
+.error-box,
+.review-summary article,
+.segmented-control,
+.empty-state,
+.board-panel,
+.result-row {
+  border-color: rgb(166 190 228 / 0.16);
+  background: linear-gradient(145deg, rgb(24 35 59 / 0.72), rgb(23 23 44 / 0.64));
+  box-shadow:
+    inset 0 1px rgb(255 255 255 / 0.045),
+    0 24px 70px rgb(2 5 15 / 0.22);
+  backdrop-filter: blur(22px) saturate(125%);
+}
+.workspace {
+  border-color: rgb(155 187 235 / 0.2);
+  box-shadow:
+    inset 0 1px rgb(255 255 255 / 0.055),
+    0 30px 90px rgb(1 4 14 / 0.3),
+    0 0 80px rgb(122 96 181 / 0.06);
+}
+.hero-proof > div + div {
+  border-color: rgb(176 199 235 / 0.12);
+}
+.hero-proof strong,
+.review-summary strong,
+.receipt strong {
+  color: #f2f5fc;
+}
+.hero-proof span,
+.review-summary span,
+.review-summary small,
+.review-toolbar > span,
+.result-row small,
+.move-cell span,
+.board-summary dt,
+.board-summary small,
+footer {
+  color: #8794ae;
+}
+.settings label,
+.pgn-field > span {
+  color: #d3d9e8;
+}
+select,
+textarea {
+  color: #f4f6fc;
+  background: rgb(8 14 28 / 0.62);
+  border-color: rgb(159 186 226 / 0.23);
+  box-shadow: inset 0 1px 8px rgb(0 0 0 / 0.12);
+}
+textarea:focus,
+select:focus,
+button:focus-visible,
+.file-button:focus-within {
+  outline-color: #8fc4ff;
+}
+.primary-button {
+  color: #080b14;
+  background: linear-gradient(135deg, #8fc4ff, #b9a0dc);
+  border-color: rgb(190 205 245 / 0.5);
+  box-shadow: 0 10px 30px rgb(90 141 224 / 0.2);
+}
+.primary-button:hover:not(:disabled) {
+  background: linear-gradient(135deg, #a3d0ff, #c8ace4);
+  box-shadow: 0 13px 34px rgb(92 145 232 / 0.26);
+}
+.secondary-button {
+  color: #e8edf8;
+  background: rgb(29 37 61 / 0.66);
+  border-color: rgb(165 187 225 / 0.22);
+  box-shadow: inset 0 1px rgb(255 255 255 / 0.04);
+}
+.secondary-button:hover:not(:disabled) {
+  background: rgb(45 51 78 / 0.76);
+  border-color: rgb(187 157 218 / 0.45);
+}
+.progress-panel progress {
+  accent-color: #9bbff7;
+}
+.progress-panel small,
+.file-import > span {
+  color: #929db4;
+}
+.segmented-control button {
+  color: #aeb8cd;
+}
+.segmented-control button[aria-pressed='true'] {
+  color: #0a0c14;
+  background: linear-gradient(135deg, #91c6ff, #c1a2df);
+  box-shadow: 0 4px 16px rgb(103 150 225 / 0.2);
+}
+.square-light {
+  background: #d9e3f2;
+}
+.square-dark {
+  background: #7184a8;
+}
+.board-square,
+.piece-b {
+  color: #182039;
+}
+.piece-w {
+  color: #fffaff;
+  text-shadow:
+    0 0 1px #1a2238,
+    0 1px 1px #1a2238;
+}
+.square-played::after,
+.legend-played {
+  border-color: #d69ad4;
+}
+.square-best::after,
+.legend-best {
+  border-color: #69b7ff;
+}
+.square-played.square-best::after {
+  border-color: #c3a6e5;
+}
+.result-row code,
+.move-label {
+  color: #dce5f6;
+}
+.result-row:hover,
+.result-selected {
+  border-color: rgb(138 184 247 / 0.52);
+  background: linear-gradient(145deg, rgb(36 53 84 / 0.82), rgb(43 34 67 / 0.74));
+}
+.result-selected {
+  box-shadow:
+    inset 3px 0 #8fc4ff,
+    inset 0 1px rgb(255 255 255 / 0.04);
+}
+.receipt {
+  border-color: rgb(166 190 228 / 0.16);
+  background: rgb(18 26 45 / 0.42);
+}
+.receipt span::before {
+  color: #697793;
 }
 
 @media (max-width: 840px) {

@@ -1,8 +1,8 @@
+import { useMemo, useState, useEffect } from 'react';
 import { Chess } from 'chess.js';
-
-import type { MoveAssessment } from './analysis/classification';
+import { formatLoss, type MoveAssessment } from './analysis/classification';
+import { variationSteps } from './analysis/variation';
 import type { PositionAnalysis } from './analysis/types';
-
 const pieces = {
   wp: '♙',
   wn: '♘',
@@ -17,7 +17,6 @@ const pieces = {
   bq: '♛',
   bk: '♚',
 } as const;
-
 const pieceNames = {
   p: 'pawn',
   n: 'knight',
@@ -26,20 +25,90 @@ const pieceNames = {
   q: 'queen',
   k: 'king',
 } as const;
-
-function uciSquares(move: string): [string, string] {
-  return [move.slice(0, 2), move.slice(2, 4)];
-}
-
 export function moveToSan(fen: string, uci: string): string {
   try {
-    const game = new Chess(fen);
-    return game.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] })?.san ?? uci;
+    return (
+      new Chess(fen).move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] })?.san ??
+      uci
+    );
   } catch {
     return uci;
   }
 }
-
+export function Board({
+  fen,
+  orientation = 'white',
+  playedMove = '',
+  bestMove = '',
+  onSquare,
+}: {
+  fen: string;
+  orientation?: 'white' | 'black';
+  playedMove?: string;
+  bestMove?: string;
+  onSquare?: (square: string) => void;
+}) {
+  const game = new Chess(fen);
+  const squares = game
+    .board()
+    .flat()
+    .map((piece, index) => ({
+      piece,
+      square: `${String.fromCharCode(97 + (index % 8))}${8 - Math.floor(index / 8)}`,
+    }));
+  if (orientation === 'black') squares.reverse();
+  return (
+    <div
+      className="chessboard"
+      role={onSquare ? 'group' : 'img'}
+      aria-label={
+        onSquare
+          ? 'Practice board. Select a piece and then its destination.'
+          : 'Chess position. Pink marks the played move and blue marks the engine choice.'
+      }
+    >
+      {squares.map(({ piece, square }, index) => {
+        const classes = [
+          'board-square',
+          (Math.floor(index / 8) + (index % 8)) % 2 === 0 ? 'square-light' : 'square-dark',
+          playedMove.includes(square) ? 'square-played' : '',
+          bestMove.includes(square) ? 'square-best' : '',
+        ]
+          .filter(Boolean)
+          .join(' ');
+        const label = piece
+          ? `${piece.color === 'w' ? 'White' : 'Black'} ${pieceNames[piece.type]} on ${square}`
+          : `Empty ${square}`;
+        const content = (
+          <>
+            {index % 8 === 0 && <span className="rank-label">{square[1]}</span>}
+            {index >= 56 && <span className="file-label">{square[0]}</span>}
+            {piece && (
+              <span className={`piece piece-${piece.color}`}>
+                {pieces[`${piece.color}${piece.type}`]}
+              </span>
+            )}
+          </>
+        );
+        return onSquare ? (
+          <button
+            type="button"
+            className={classes}
+            key={square}
+            aria-label={label}
+            onClick={() => onSquare(square)}
+          >
+            {content}
+          </button>
+        ) : (
+          <div className={classes} key={square} role="img" aria-label={label}>
+            {content}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 interface ChessboardProps {
   result: PositionAnalysis;
   assessment: MoveAssessment;
@@ -47,8 +116,8 @@ interface ChessboardProps {
   canGoNext: boolean;
   onPrevious: () => void;
   onNext: () => void;
+  orientation?: 'white' | 'black';
 }
-
 export function Chessboard({
   result,
   assessment,
@@ -56,50 +125,57 @@ export function Chessboard({
   canGoNext,
   onPrevious,
   onNext,
+  orientation = 'white',
 }: ChessboardProps) {
-  const game = new Chess(result.fen);
-  const board = game.board();
-  const playedSquares = uciSquares(result.playedMoveUci);
-  const bestSquares = uciSquares(result.bestMoveUci);
-
+  const [preview, setPreview] = useState<'before' | 'played' | 'line'>('before');
+  const [rank, setRank] = useState(0);
+  const [step, setStep] = useState(0);
+  const [flipped, setFlipped] = useState(false);
+  useEffect(() => {
+    setPreview('before');
+    setStep(0);
+    setRank(0);
+  }, [result.ply, result.fen]);
+  const line = result.lines[rank] ?? result.lines[0];
+  const steps = useMemo(() => {
+    try {
+      return variationSteps(result.fen, line?.movesUci ?? []);
+    } catch {
+      return [{ fen: result.fen, san: 'Variation unavailable' }];
+    }
+  }, [result.fen, line]);
+  const playedFen = useMemo(() => {
+    try {
+      return variationSteps(result.fen, [result.playedMoveUci])[1]!.fen;
+    } catch {
+      return result.fen;
+    }
+  }, [result.fen, result.playedMoveUci]);
+  const displayFen =
+    preview === 'played'
+      ? playedFen
+      : preview === 'line'
+        ? (steps[step] ?? steps[0]!).fen
+        : result.fen;
+  const actualOrientation = flipped ? (orientation === 'white' ? 'black' : 'white') : orientation;
   return (
     <div className="board-panel">
-      <div
-        className="chessboard"
-        role="img"
-        aria-label={`Position before ${result.san}. Orange marks the played move and green marks Stockfish's choice.`}
-      >
-        {board.flatMap((rank, rankIndex) =>
-          rank.map((piece, fileIndex) => {
-            const square = `${String.fromCharCode(97 + fileIndex)}${8 - rankIndex}`;
-            const isPlayed = playedSquares.includes(square);
-            const isBest = bestSquares.includes(square);
-            const classes = [
-              'board-square',
-              (rankIndex + fileIndex) % 2 === 0 ? 'square-light' : 'square-dark',
-              isPlayed ? 'square-played' : '',
-              isBest ? 'square-best' : '',
-            ]
-              .filter(Boolean)
-              .join(' ');
-            const pieceKey = piece ? (`${piece.color}${piece.type}` as keyof typeof pieces) : null;
-            const label = piece
-              ? `${piece.color === 'w' ? 'White' : 'Black'} ${pieceNames[piece.type]} on ${square}`
-              : `Empty ${square}`;
-
-            return (
-              <div className={classes} key={square} aria-label={label}>
-                {fileIndex === 0 && <span className="rank-label">{8 - rankIndex}</span>}
-                {rankIndex === 7 && <span className="file-label">{square[0]}</span>}
-                {pieceKey && (
-                  <span className={`piece piece-${piece!.color}`}>{pieces[pieceKey]}</span>
-                )}
-              </div>
-            );
-          }),
-        )}
+      <div className="board-top">
+        <span>{result.sideToMove === 'white' ? 'White' : 'Black'} to move</span>
+        <button
+          className="text-button"
+          onClick={() => setFlipped((v) => !v)}
+          aria-label="Flip board"
+        >
+          Flip board ↻
+        </button>
       </div>
-
+      <Board
+        fen={displayFen}
+        orientation={actualOrientation}
+        playedMove={preview === 'before' ? result.playedMoveUci : ''}
+        bestMove={preview === 'before' ? result.bestMoveUci : ''}
+      />
       <div className="board-summary">
         <div>
           <span className={`move-label label-${assessment.label.toLowerCase()}`}>
@@ -121,17 +197,80 @@ export function Chessboard({
           </div>
           <div>
             <dt>Evaluation lost</dt>
-            <dd>
-              {assessment.centipawnLoss === undefined
-                ? 'Mate sequence'
-                : `${(assessment.centipawnLoss / 100).toFixed(2)} pawns`}
-            </dd>
+            <dd>{formatLoss(assessment)}</dd>
           </div>
         </dl>
         <p className="legend">
-          <span className="legend-played" /> Played move
-          <span className="legend-best" /> Engine choice
+          <span className="legend-played" />
+          Played move <span className="legend-best" />
+          Engine choice
         </p>
+        {assessment.reason && <p className="confidence-note">{assessment.reason}</p>}
+        <div className="segmented-control board-views" aria-label="Board view">
+          <button aria-pressed={preview === 'before'} onClick={() => setPreview('before')}>
+            Before move
+          </button>
+          <button aria-pressed={preview === 'played'} onClick={() => setPreview('played')}>
+            After played move
+          </button>
+          <button
+            aria-pressed={preview === 'line'}
+            onClick={() => {
+              setPreview('line');
+              setStep(1);
+            }}
+          >
+            Engine line
+          </button>
+        </div>
+        {preview === 'line' && (
+          <div className="variation-panel">
+            <label>
+              Candidate line
+              <select
+                value={rank}
+                onChange={(e) => {
+                  setRank(Number(e.target.value));
+                  setStep(1);
+                }}
+              >
+                {result.lines.map((l, i) => (
+                  <option key={l.rank} value={i}>
+                    {i + 1}. {moveToSan(result.fen, l.movesUci[0] ?? '')} · depth {l.depth}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="variation-moves" aria-label="Engine variation">
+              {steps.map((s, i) => (
+                <button key={i} aria-pressed={step === i} onClick={() => setStep(i)}>
+                  {i === 0 ? 'Start' : s.san}
+                </button>
+              ))}
+            </div>
+            <div className="board-controls">
+              <button
+                className="secondary-button"
+                aria-label="Previous variation move"
+                disabled={step === 0}
+                onClick={() => setStep((s) => Math.max(0, s - 1))}
+              >
+                ← Line
+              </button>
+              <span>
+                Move {step}/{steps.length - 1}
+              </span>
+              <button
+                className="secondary-button"
+                aria-label="Next variation move"
+                disabled={step >= steps.length - 1}
+                onClick={() => setStep((s) => Math.min(steps.length - 1, s + 1))}
+              >
+                Line →
+              </button>
+            </div>
+          </div>
+        )}
         <div className="board-controls">
           <button className="secondary-button" onClick={onPrevious} disabled={!canGoPrevious}>
             ← Previous
@@ -140,7 +279,7 @@ export function Chessboard({
             Next →
           </button>
         </div>
-        <small>Tip: use the left and right arrow keys to move through the game.</small>
+        <small>Left and right arrow keys follow the current move filter.</small>
       </div>
     </div>
   );

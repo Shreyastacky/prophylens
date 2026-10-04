@@ -1,8 +1,9 @@
 import type { AnalysisSettings, EngineLine, GamePosition, PositionAnalysis } from './types';
 import { ENGINE_ASSET } from './types';
 import { parseBestMove, parseInfoLine } from './uci';
+import { legalVariation } from './variation';
 
-const INITIALIZATION_TIMEOUT_MS = 30_000;
+const INITIALIZATION_TIMEOUT_MS = 90_000;
 const POSITION_TIMEOUT_MS = 120_000;
 
 function abortError(): DOMException {
@@ -128,8 +129,10 @@ export class StockfishClient {
       lines: EngineLine[];
     }> => {
       const lines = new Map<number, EngineLine>();
+      const exactLines = new Map<string, EngineLine>();
       let bestMove = '';
       this.createWorker().postMessage(`setoption name MultiPV value ${multiPv}`);
+      this.createWorker().postMessage('setoption name Clear Hash');
       this.createWorker().postMessage(position.positionCommand);
       const command = `go nodes ${settings.nodes}${searchMove ? ` searchmoves ${searchMove}` : ''}`;
 
@@ -147,13 +150,29 @@ export class StockfishClient {
             const parsed = parseInfoLine(line);
             if (!parsed) return;
             const previous = lines.get(parsed.rank);
-            if (!previous || parsed.depth >= previous.depth) lines.set(parsed.rank, parsed);
+            if (
+              parsed.scoreBound === 'exact' &&
+              parsed.movesUci.length &&
+              legalVariation(position.fen, parsed.movesUci)
+            )
+              exactLines.set(parsed.movesUci[0]!, parsed);
+            if (
+              parsed.movesUci.length &&
+              legalVariation(position.fen, parsed.movesUci) &&
+              (!previous || parsed.depth >= previous.depth)
+            )
+              lines.set(parsed.rank, parsed);
             onNodes((searchMove ? settings.nodes : 0) + parsed.nodes);
           },
         },
       );
 
-      return { bestMove, lines: [...lines.values()].sort((a, b) => a.rank - b.rank) };
+      const finalLines = [...lines.values()]
+        .sort((a, b) => a.rank - b.rank)
+        .map((line) => exactLines.get(line.movesUci[0]!) ?? line);
+      const best = exactLines.get(bestMove);
+      if (best) finalLines[0] = { ...best, rank: 1 };
+      return { bestMove, lines: finalLines };
     };
 
     const bestSearch = await search(settings.multiPv);
