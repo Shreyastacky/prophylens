@@ -131,6 +131,22 @@ test('keeps the completed review usable on a phone-sized screen', async ({ page 
   await expect(page.locator('.results .board-square')).toHaveCount(64);
   await expectPerfectlySquareBoard(page);
   await expect(page.getByText('Biggest miss')).toBeVisible();
+  const overflow = await page.evaluate(() =>
+    [...document.querySelectorAll('body *')]
+      .filter((el) => {
+        const box = el.getBoundingClientRect();
+        return box.right > window.innerWidth + 1 && box.width > 1;
+      })
+      .map((el) => ({
+        tag: el.tagName,
+        class: el.className,
+        width: el.getBoundingClientRect().width,
+      })),
+  );
+  await testInfo.attach('layout bounds', {
+    body: JSON.stringify(overflow),
+    contentType: 'application/json',
+  });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );

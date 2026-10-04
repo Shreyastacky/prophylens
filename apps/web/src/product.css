@@ -408,3 +408,27 @@ footer {
     min-width: 0;
   }
 }
+
+.import-panel,
+.pgn-field,
+.settings label {
+  grid-template-columns: minmax(0, 1fr);
+}
+.import-panel > *,
+.pgn-field > *,
+.settings > *,
+.settings label > *,
+.file-import > * {
+  min-width: 0;
+  max-width: 100%;
+}
+.file-import > span {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 840px) {
+  .workspace,
+  .review-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
