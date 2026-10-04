@@ -325,8 +325,8 @@ h3 {
   font-weight: 550;
   color: var(--ink);
 }
-.studio-shortcut {
-  display: none;
+.hero .studio-shortcut {
+  margin-top: 12px;
 }
 .studio-stage {
   display: grid;

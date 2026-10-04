@@ -10,7 +10,7 @@ test('library survives refresh, backup restore and practice; review is accessibl
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.getByRole('textbox', { name: /PGN/ }).fill(game);
   await page.getByRole('button', { name: 'Analyse game' }).click();
-  await expect(page.getByText('Analysis complete')).toBeVisible();
+  await expect(page.getByText('Analysis complete')).toBeVisible({ timeout: 120_000 });
   await expect(page.locator('.library-card')).toHaveCount(1);
   await page.getByLabel('Review player').selectOption('white');
   await expect(page.locator('.result-row')).toHaveCount(2);

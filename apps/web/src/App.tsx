@@ -52,6 +52,7 @@ export function App() {
     [parsed, setParsed] = useState<ParsedGame | null>(null),
     [parseError, setParseError] = useState<string | null>(null),
     [validating, setValidating] = useState(true);
+  const [parsedSource, setParsedSource] = useState<string | null>(null);
   const [settings, setSettings] = useState<AnalysisSettings>({ nodes: 10000, multiPv: 2 }),
     [status, setStatus] = useState<Status>('idle'),
     [engineName, setEngineName] = useState('Stockfish 18 Lite');
@@ -82,6 +83,7 @@ export function App() {
   const focusReview = useRef(false);
   const [importing, setImporting] = useState(false);
   const busy = importing || status === 'loading' || status === 'analysing';
+  const parsedMatches = parsed !== null && parsedSource === pgn;
   const showReview = results.length > 0 && !busy;
   useEffect(() => {
     if (!showReview || status !== 'complete' || !focusReview.current) return;
@@ -118,6 +120,7 @@ export function App() {
           .then((game) => {
             if (!abort.signal.aborted) {
               setParsed(game);
+              setParsedSource(pgn);
               setValidating(false);
             }
           })
@@ -180,6 +183,12 @@ export function App() {
     [],
   );
   function replacePgn(next: string, name: string | null) {
+    if (next !== pgn) {
+      setValidating(true);
+      setParsed(null);
+      setParsedSource(null);
+      setParseError(null);
+    }
     setPgn(next);
     setFileName(name);
     setQueue([]);
@@ -248,7 +257,7 @@ export function App() {
     }
   }
   async function analyse() {
-    if (!parsed || busy || !libraryReady) return;
+    if (!parsed || !parsedMatches || validating || busy || !libraryReady) return;
     focusReview.current = true;
     const token = ++operation.current,
       abort = new AbortController();
@@ -511,7 +520,7 @@ export function App() {
           {showReview ? (
             <Review results={results} player={player} onPlayer={changePlayer} />
           ) : (
-            <GamePreview game={parsed} />
+            <GamePreview game={parsedMatches ? parsed : null} />
           )}
           {run && showReview && (
             <div className="receipt">
@@ -606,7 +615,7 @@ export function App() {
               <button
                 className="primary-button"
                 onClick={() => void analyse()}
-                disabled={!parsed || validating || busy || !libraryReady}
+                disabled={!parsedMatches || validating || busy || !libraryReady}
               >
                 Analyse game <ArrowUpRight size={17} aria-hidden="true" />
               </button>
