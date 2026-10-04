@@ -24,6 +24,8 @@ test('batch import, old receipt migration, damaged records and oversize paste', 
   receipt.provenance.classifierVersion = 'move-loss-v1';
   await page.getByRole('button', { name: 'Clear library', exact: true }).click();
   await page.getByRole('button', { name: 'Confirm delete', exact: true }).click();
+  await expect(page.locator('.library-card')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Confirm delete', exact: true })).toHaveCount(0);
   await page.evaluate(
     (run) => localStorage.setItem('prophylens:last-analysis:v2', JSON.stringify(run)),
     receipt,

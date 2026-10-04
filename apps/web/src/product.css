@@ -359,3 +359,52 @@ footer {
     background: #151e31;
   }
 }
+
+/* Allow platform fonts and long local metadata to wrap inside narrow layouts. */
+.workspace > *,
+.review-layout > *,
+.practice-layout > *,
+.nav > *,
+.library-card,
+.board-panel,
+.board-summary,
+.review-toolbar > * {
+  min-width: 0;
+}
+.board-summary dd,
+.library-card h3,
+.receipt span,
+.result-row > div,
+.storage-warning,
+.notice,
+.file-import small {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 560px) {
+  .board-summary {
+    padding: 16px;
+  }
+  .board-views {
+    display: flex;
+  }
+  .board-views button {
+    min-width: 0;
+    flex-basis: 85px;
+  }
+  .nav {
+    flex-wrap: wrap;
+  }
+  .nav-links {
+    min-width: 0;
+    flex: 1 1 170px;
+  }
+  .result-row {
+    min-width: 0;
+  }
+  .result-row > div {
+    min-width: 0;
+  }
+  .segmented-control button {
+    min-width: 0;
+  }
+}

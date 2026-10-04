@@ -403,6 +403,7 @@ export function App() {
     }
   }
   async function deleteConfirmed(id: string) {
+    setImporting(true);
     try {
       if (id === 'all') {
         await clearLibrary();
@@ -420,6 +421,8 @@ export function App() {
       setConfirmDelete(null);
     } catch (e) {
       setWarning(e instanceof Error ? e.message : 'Could not delete game.');
+    } finally {
+      setImporting(false);
     }
   }
   const progressPercent = progress.total
@@ -690,7 +693,11 @@ export function App() {
             <button className="secondary-button" onClick={() => setConfirmDelete(null)}>
               Keep games
             </button>
-            <button className="danger-button" onClick={() => void deleteConfirmed(confirmDelete)}>
+            <button
+              className="danger-button"
+              disabled={busy}
+              onClick={() => void deleteConfirmed(confirmDelete)}
+            >
               Confirm delete
             </button>
           </div>
