@@ -29,11 +29,15 @@ and enabled editor, releases the stale request, then validates and previews a fr
 WebKit's repeated PGN/engine worker loads were rejected under COEP after cache
 revalidation. The failure traces explicitly report a Cross-Origin-Embedder-Policy
 violation. Local and production response policies now also declare
-Cross-Origin-Resource-Policy: same-origin. COEP require-corp and COOP same-origin
-remain enabled. Both initial and revalidated worker responses carry the policy.
+Cross-Origin-Resource-Policy: same-origin. Vite's COEP require-corp and COOP same-origin
+remain enabled. Both initial and revalidated preview worker responses carry the policy.
 The preview server returned 304 before applying its configured headers. An early
 middleware now applies the policy before that return, with a response regression
 for both PGN and engine scripts.
+Sites static hosting currently does not apply the packaged `_headers` file: its
+document and workers are not cross-origin isolated. The single-threaded engine works
+in that mode. Hosted verification checks consistent document/worker policy and real
+engine use; it does not claim that Sites applies the packaged isolation headers.
 
 ## Verification
 
