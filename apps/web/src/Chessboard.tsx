@@ -4,6 +4,7 @@ import { ArrowsClockwise } from '@phosphor-icons/react/dist/csr/ArrowsClockwise'
 import { formatLoss, type MoveAssessment } from './analysis/classification';
 import { variationSteps } from './analysis/variation';
 import type { PositionAnalysis } from './analysis/types';
+import { movePrefix } from './analysis/move-number';
 const pieceNames = {
   p: 'pawn',
   n: 'knight',
@@ -35,15 +36,18 @@ export function Board({
   bestMove?: string;
   onSquare?: (square: string) => void;
 }) {
-  const game = new Chess(fen);
-  const squares = game
-    .board()
-    .flat()
-    .map((piece, index) => ({
-      piece,
-      square: `${String.fromCharCode(97 + (index % 8))}${8 - Math.floor(index / 8)}`,
-    }));
-  if (orientation === 'black') squares.reverse();
+  const squares = useMemo(
+    () =>
+      new Chess(fen)
+        .board()
+        .flat()
+        .map((piece, index) => ({
+          piece,
+          square: `${String.fromCharCode(97 + (index % 8))}${8 - Math.floor(index / 8)}`,
+        })),
+    [fen],
+  );
+  const ordered = orientation === 'black' ? [...squares].reverse() : squares;
   return (
     <div
       className="chessboard"
@@ -54,7 +58,7 @@ export function Board({
           : 'Chess position. Amber marks the played move and blue marks the engine choice.'
       }
     >
-      {squares.map(({ piece, square }, index) => {
+      {ordered.map(({ piece, square }, index) => {
         const classes = [
           'board-square',
           (Math.floor(index / 8) + (index % 8)) % 2 === 0 ? 'square-light' : 'square-dark',
@@ -207,8 +211,7 @@ export function Chessboard({
             {assessment.label}
           </span>
           <strong>
-            {Math.ceil(result.ply / 2)}
-            {result.ply % 2 === 0 ? '…' : '.'} {result.san}
+            {movePrefix(result.fen)} {result.san}
           </strong>
         </div>
         <dl>

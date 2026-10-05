@@ -79,7 +79,7 @@ test('analyses a game and connects the results to the chessboard', async ({ page
     'White rook on h1',
   );
   await page.getByRole('button', { name: 'Flip board', exact: true }).click();
-  await expect(page.locator('.board-summary > div').first().getByText('1… e5')).toBeVisible();
+  await expect(page.locator('.board-summary > div').first().getByText('1... e5')).toBeVisible();
 
   await page.keyboard.press('ArrowLeft');
   await expect(page.locator('.board-summary > div').first().getByText('1. f3')).toBeVisible();

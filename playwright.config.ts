@@ -31,10 +31,9 @@ export default defineConfig({
   webServer: remote
     ? undefined
     : {
-        command:
-          'node node_modules/vite/bin/vite.js preview --config apps/web/vite.config.ts --outDir dist --host 127.0.0.1 --port 5174 --strictPort',
+        command: 'node scripts/serve-production.mjs',
         url: 'http://127.0.0.1:5174',
-        reuseExistingServer: !process.env.CI,
+        reuseExistingServer: false,
         timeout: 120_000,
       },
 });
