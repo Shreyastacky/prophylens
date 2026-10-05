@@ -81,8 +81,8 @@ export function App() {
     abortRef = useRef<AbortController | null>(null),
     operation = useRef(0);
   const focusReview = useRef(false);
-  const [importing, setImporting] = useState(false);
-  const busy = importing || status === 'loading' || status === 'analysing';
+  const [importing, setImporting] = useState<'pgn' | 'backup' | 'delete' | null>(null);
+  const busy = importing !== null || status === 'loading' || status === 'analysing';
   const parsedMatches = parsed !== null && parsedSource === pgn;
   const showReview = results.length > 0 && !busy;
   useEffect(() => {
@@ -212,28 +212,41 @@ export function App() {
       setFileError('That PGN is larger than the 2 MB safety limit.');
       return;
     }
-    setValidating(true);
-    setImporting(true);
+    const token = ++operation.current;
+    const abort = new AbortController();
+    abortRef.current = abort;
+    setFileError(null);
+    setNotice(null);
+    setImporting('pgn');
     try {
       const parts = splitPgnGames(await file.text());
-      for (const part of parts) await parsePgnAsync(part);
+      for (const part of parts) await parsePgnAsync(part, abort.signal);
+      if (operation.current !== token || abort.signal.aborted) return;
       replacePgn(parts[0]!, file.name);
       setQueue(parts.slice(1));
       if (parts.length > 1)
         setNotice(`${parts.length} games ready. Analyse game will review and save each in order.`);
     } catch (e) {
-      setFileError(e instanceof Error ? e.message : 'Could not import PGN.');
+      if (operation.current === token && !abort.signal.aborted)
+        setFileError(e instanceof Error ? e.message : 'Could not import PGN.');
     } finally {
-      setValidating(false);
-      setImporting(false);
+      if (operation.current === token) {
+        abortRef.current = null;
+        setImporting(null);
+      }
     }
   }
   function cancel() {
     operation.current++;
     abortRef.current?.abort();
+    abortRef.current = null;
+    if (importing === 'pgn') {
+      setImporting(null);
+      setNotice('PGN import cancelled. Your current game was kept.');
+      return;
+    }
     clientRef.current?.terminate();
     clientRef.current = null;
-    abortRef.current = null;
     setStatus('cancelled');
   }
   async function restart() {
@@ -412,7 +425,7 @@ export function App() {
       setWarning('The backup exceeds the 20 MB limit.');
       return;
     }
-    setImporting(true);
+    setImporting('backup');
     try {
       const records = await readLibraryFile(await file.text());
       await importGames(records);
@@ -423,11 +436,11 @@ export function App() {
     } catch (e) {
       setWarning(e instanceof Error ? e.message : 'Could not import backup.');
     } finally {
-      setImporting(false);
+      setImporting(null);
     }
   }
   async function deleteConfirmed(id: string) {
-    setImporting(true);
+    setImporting('delete');
     try {
       if (id === 'all') {
         await clearLibrary();
@@ -446,7 +459,7 @@ export function App() {
     } catch (e) {
       setWarning(e instanceof Error ? e.message : 'Could not delete game.');
     } finally {
-      setImporting(false);
+      setImporting(null);
     }
   }
   const progressPercent = progress.total
@@ -619,11 +632,11 @@ export function App() {
               >
                 Analyse game <ArrowUpRight size={17} aria-hidden="true" />
               </button>
-              {busy ? (
+              {busy && (importing === null || importing === 'pgn') ? (
                 <button className="secondary-button" onClick={cancel}>
                   Cancel
                 </button>
-              ) : (
+              ) : !busy ? (
                 <>
                   <button className="secondary-button" onClick={() => void restart()}>
                     Restart engine
@@ -632,25 +645,39 @@ export function App() {
                     Load sample
                   </button>
                 </>
-              )}
+              ) : null}
             </div>
             {busy && (
               <div className="progress-panel" aria-live="polite">
                 <div>
                   <span>
-                    {status === 'loading'
-                      ? 'Loading the 7 MB engine'
-                      : `Analysing ${progress.move}`}
+                    {importing === 'pgn'
+                      ? 'Reading your PGN file'
+                      : importing === 'backup'
+                        ? 'Restoring your library'
+                        : importing === 'delete'
+                          ? 'Updating your library'
+                          : status === 'loading'
+                            ? 'Loading the 7 MB engine'
+                            : `Analysing ${progress.move}`}
                   </span>
-                  <span>
-                    {progress.completed}/{progress.total} positions
-                  </span>
+                  {!importing && (
+                    <span>
+                      {progress.completed}/{progress.total} positions
+                    </span>
+                  )}
                 </div>
-                <progress aria-label="Analysis progress" value={progressPercent} max="100" />
-                <small>
-                  Game {progress.game}/{progress.count} · {progress.nodes.toLocaleString()} nodes in
-                  this position
-                </small>
+                <progress
+                  aria-label={importing ? 'Import progress' : 'Analysis progress'}
+                  value={importing ? undefined : progressPercent}
+                  max="100"
+                />
+                {!importing && (
+                  <small>
+                    Game {progress.game}/{progress.count} · {progress.nodes.toLocaleString()} nodes
+                    in this position
+                  </small>
+                )}
               </div>
             )}
             {error && (
