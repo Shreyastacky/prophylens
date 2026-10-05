@@ -1,6 +1,21 @@
 import { expect, test } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
+test('a held pointer press starts analysis without scrolling the button away', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: 'Analyse game' })).toBeEnabled();
+  await page
+    .getByRole('textbox', { name: /PGN/ })
+    .fill('[Event "Pointer test"]\n[White "You"]\n[Black "Partner"]\n\n1. f3 e5 *');
+  await page.getByRole('button', { name: 'Analyse game' }).click({ delay: 100 });
+  await expect(page.locator('.nav .status')).not.toHaveText('Engine idle', { timeout: 2000 });
+  await expect(page.getByText('Analysis complete', { exact: true })).toBeVisible({
+    timeout: 120_000,
+  });
+  await expect(page.locator('.result-row')).toHaveCount(2);
+});
+
 test('shows a real game preview before analysis and resets it for a new PGN', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('button', { name: 'Analyse game' })).toBeEnabled();

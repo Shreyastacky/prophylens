@@ -39,6 +39,8 @@ The glass rim resolves gently on entry; text and hit areas are fully present fro
 the first frame. Buttons keep fixed hit areas and provide inset press
 feedback; their icons move subtly on hover. The engine dot pulses only during loading or analysis.
 Every animation and transition is disabled for reduced motion.
+Page focus and anchor scrolling settle immediately. Global smooth scrolling moved
+the Analyse target between pointer-down and pointer-up in Firefox, so it was removed.
 No continuous React render loop, scroll handler, new animation runtime or external font
 request was added. System fonts remain local.
 

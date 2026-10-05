@@ -78,7 +78,8 @@
   box-sizing: border-box;
 }
 html {
-  scroll-behavior: smooth;
+  /* Native focus scrolling must settle before pointer-up, especially in Firefox. */
+  scroll-behavior: auto;
   scroll-padding-top: 100px;
 }
 body {

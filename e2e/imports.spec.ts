@@ -56,3 +56,50 @@ test('batch import, old receipt migration, damaged records and oversize paste', 
   await expect(page.getByRole('button', { name: 'Analyse game' })).toBeDisabled();
   await expect(page.getByRole('alert')).toBeVisible();
 });
+
+test('cancelling a PGN import keeps the current game and releases the editor immediately', async ({
+  page,
+  context,
+}) => {
+  await page.goto('/');
+  const analyse = page.getByRole('button', { name: 'Analyse game' });
+  await expect(analyse).toBeEnabled();
+  const editor = page.getByRole('textbox', { name: /PGN/ });
+  const original = await editor.inputValue();
+  let release = () => {};
+  let requested = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const request = new Promise<void>((resolve) => {
+    requested = resolve;
+  });
+  await context.route('**/assets/pgn.worker-*.js', async (route) => {
+    requested();
+    await held;
+    await route.continue().catch(() => {});
+  });
+  await page.getByLabel('Choose PGN file').setInputFiles({
+    name: 'delayed.pgn',
+    mimeType: 'application/x-chess-pgn',
+    buffer: Buffer.from('1. d4 d5 *'),
+  });
+  try {
+    await request;
+    await expect(page.getByText('Reading your PGN file')).toBeVisible();
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(editor).toBeEnabled({ timeout: 2000 });
+    await expect(analyse).toBeEnabled({ timeout: 2000 });
+    await expect(editor).toHaveValue(original);
+    await expect(page.getByText('PGN import cancelled. Your current game was kept.')).toBeVisible();
+  } finally {
+    release();
+  }
+  await context.unrouteAll({ behavior: 'wait' });
+  await editor.fill('1. c4 e5 *');
+  await expect(analyse).toBeEnabled();
+  await page.getByRole('button', { name: 'Next preview move' }).click();
+  await expect(page.locator('.preview-toolbar strong')).toHaveText('c4');
+  await expect(editor).toHaveValue('1. c4 e5 *');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+});
