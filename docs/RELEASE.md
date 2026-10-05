@@ -31,6 +31,8 @@ Responses enforce COOP same-origin, COEP require-corp, CORP same-origin, nosniff
 
 The browser suite checks actual production responses, meta CSP, isolation, initial/cached workers, WASM MIME, licence hashes, modified engine rejection/recovery, version consistency, FEN numbering, scoped arrows, Good practice alternatives and the saved review lifecycle. Hosted release verification runs the same suite on the public URL through the manual Hosted release verification workflow with an expected source revision.
 
+Cloudflare injects an inline challenge into hosted HTML; the strict CSP blocks it. Hosted tests pin that provider script's normalized body and attach its blocked-execution diagnostics separately. Other scripts and application console errors still fail verification. Weak ETags produced by edge compression revalidate with the same security policy.
+
 ## Known boundaries
 
 Physical Android/iOS devices and native Safari, slow-network/battery behaviour, human accessibility review and coach validation have not been proved. WebKit could not run locally because Windows runtime libraries were missing. Phone-size browser layout is not physical-device proof.
