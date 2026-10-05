@@ -24,6 +24,17 @@ and deletion do not offer a Cancel button that cannot roll back their storage tr
 The regression holds a PGN worker request, cancels the import, checks the original game
 and enabled editor, releases the stale request, then validates and previews a fresh game.
 
+## Cached worker policy
+
+WebKit's repeated PGN/engine worker loads were rejected under COEP after cache
+revalidation. The failure traces explicitly report a Cross-Origin-Embedder-Policy
+violation. Local and production response policies now also declare
+Cross-Origin-Resource-Policy: same-origin. COEP require-corp and COOP same-origin
+remain enabled. Both initial and revalidated worker responses carry the policy.
+The preview server returned 304 before applying its configured headers. An early
+middleware now applies the policy before that return, with a response regression
+for both PGN and engine scripts.
+
 ## Verification
 
 Formatting, TypeScript, all 60 unit/integration checks, build and production dependency
