@@ -1,7 +1,7 @@
 import type { AnalysisSettings, EngineLine, GamePosition, PositionAnalysis } from './types';
-import { ENGINE_ASSET } from './types';
 import { parseBestMove, parseInfoLine } from './uci';
 import { legalVariation } from './variation';
+import { verifiedEngineUrls } from './engine-integrity';
 
 const INITIALIZATION_TIMEOUT_MS = 90_000;
 const POSITION_TIMEOUT_MS = 120_000;
@@ -16,11 +16,14 @@ export class StockfishClient {
   private failureListeners = new Set<(error: Error) => void>();
   private initialization: Promise<string> | null = null;
   private engineName = 'Stockfish 18';
+  private verified: { script: string; wasm: string } | null = null;
+  private verificationAbort: AbortController | null = null;
 
   private createWorker(): Worker {
     if (this.worker) return this.worker;
 
-    const worker = new Worker(ENGINE_ASSET.workerUrl);
+    if (!this.verified) throw new Error('Engine bytes have not been verified.');
+    const worker = new Worker(`${this.verified.script}#${encodeURIComponent(this.verified.wasm)}`);
     worker.addEventListener('message', (event: MessageEvent<unknown>) => {
       const text = String(event.data);
       for (const line of text.split(/\r?\n/).filter(Boolean)) {
@@ -92,6 +95,10 @@ export class StockfishClient {
     if (this.initialization) return this.initialization;
 
     this.initialization = (async () => {
+      const abort = new AbortController();
+      this.verificationAbort = abort;
+      this.verified = await verifiedEngineUrls(abort.signal);
+      abort.signal.throwIfAborted();
       await this.commandUntil('uci', (line) => line === 'uciok', {
         timeoutMs: INITIALIZATION_TIMEOUT_MS,
         onLine: (line) => {
@@ -198,11 +205,18 @@ export class StockfishClient {
   }
 
   terminate(): void {
+    this.verificationAbort?.abort();
+    this.verificationAbort = null;
     if (this.worker) {
       this.worker.postMessage('quit');
       this.worker.terminate();
     }
     this.worker = null;
+    if (this.verified) {
+      URL.revokeObjectURL(this.verified.script);
+      URL.revokeObjectURL(this.verified.wasm);
+      this.verified = null;
+    }
     this.initialization = null;
     this.listeners.clear();
     const error = abortError();

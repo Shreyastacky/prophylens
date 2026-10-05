@@ -3,9 +3,7 @@ import { expect, test } from '@playwright/test';
 test('fresh and revalidated workers retain the origin isolation policy', async ({ request }) => {
   const document = await request.get('/');
   const embedderPolicy = document.headers()['cross-origin-embedder-policy'];
-  // Sites static hosting is not isolated; the bundled engine is single-threaded.
-  // Vite preview is isolated and must preserve its policy on every worker response.
-  if (!process.env.PUBLIC_BASE_URL) expect(embedderPolicy).toBe('require-corp');
+  expect(embedderPolicy).toBe('require-corp');
   const manifest = (await (await request.get('/release.json')).json()) as {
     assets: Record<string, string>;
   };

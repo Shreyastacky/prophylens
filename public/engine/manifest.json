@@ -1,0 +1,7 @@
+{
+  "upstreamRelease": "nmrugg/stockfish.js v18.0.0",
+  "upstreamStockfishCommit": "cb3d4ee",
+  "evaluationNetwork": "nn-9067e33176e8.nnue",
+  "scriptSha256": "2278005057f381491f1c9bb3e44c9f5920b3a00bef9759e33cc6582769a1f1fe",
+  "wasmSha256": "a8fbc05ec6920b56d7485826dcb02c5ffd2826bcbf751cf973046f237a9096f1"
+}

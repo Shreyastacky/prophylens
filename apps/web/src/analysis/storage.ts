@@ -9,6 +9,8 @@ import type {
 } from './types';
 import { parseGame, MAX_BATCH_GAMES } from './pgn';
 import { legalVariation } from './variation';
+import { assessMove } from './classification';
+import { recordedPracticeAssessment, isAcceptedPracticeMove } from './practice-assessment';
 const DB_NAME = 'prophylens-library';
 const LEGACY_KEY = 'prophylens:last-analysis:v2';
 export const MAX_LIBRARY_FILE_BYTES = 20 * 1024 * 1024;
@@ -302,11 +304,35 @@ export async function validateLibraryGame(value: unknown): Promise<LibraryGame> 
     const pos = analysis.positions[ply - 1];
     if (!pos || !legalVariation(pos.fen, [moveUci]) || typeof a.correct !== 'boolean')
       throw new Error('Invalid practice attempt.');
+    let assessment = recordedPracticeAssessment(pos, moveUci);
+    let comparison: PracticeAttempt['comparison'];
+    if (a.comparison !== undefined) {
+      const evidence = object(a.comparison);
+      comparison = {
+        bestMoveUci: text(evidence.bestMoveUci, 5),
+        bestLine: lineFrom(evidence.bestLine, pos.fen),
+        playedLine: lineFrom(evidence.playedLine, pos.fen),
+      };
+      if (
+        comparison.bestLine.movesUci[0] !== comparison.bestMoveUci ||
+        comparison.playedLine.movesUci[0] !== moveUci
+      )
+        throw new Error('Practice comparison does not match the attempted move.');
+      if (!assessment)
+        assessment = assessMove({
+          ...pos,
+          playedMoveUci: moveUci,
+          bestMoveUci: comparison.bestMoveUci,
+          lines: [comparison.bestLine],
+          playedLine: comparison.playedLine,
+        });
+    }
     return {
       ply,
       moveUci,
-      correct: moveUci === pos.bestMoveUci,
+      correct: assessment !== undefined && isAcceptedPracticeMove(assessment.label),
       attemptedAt: timestamp(a.attemptedAt),
+      ...(comparison ? { comparison } : {}),
     };
   });
   return { ...game, updatedAt: timestamp(r.updatedAt), attempts };
