@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { createHash } from 'node:crypto';
 
 const shortGame = `[Event "Browser test"]
 [White "Tester"]
@@ -97,7 +98,30 @@ test('analyses a game and connects the results to the chessboard', async ({ page
   await expect(page.getByRole('button', { name: 'Download evidence' })).toHaveCount(0);
   await expect(page.getByText('Engine idle')).toBeVisible();
 
-  expect(consoleErrors).toEqual([]);
+  // Cloudflare injects this challenge into hosted HTML after the Worker responds.
+  // Keep CSP strict: accept only a pinned provider script body (apart from its
+  // per-request ray/timestamp), and record its blocked execution, not app errors.
+  if (process.env.PUBLIC_BASE_URL === 'https://prophylens.badakanadong.chatgpt.site') {
+    const inline = await page.locator('script:not([src])').allTextContents();
+    for (const body of inline)
+      expect(
+        createHash('sha256')
+          .update(body.replace(/r:'[a-f0-9]+',t:'[A-Za-z0-9+/=]+'/g, "r:'',t:''"))
+          .digest('hex'),
+      ).toBe('2ce6cce2e71a4aa11bfb18f394acd5462f8c016f5886a842c256553a7abdac90');
+    const providerDiagnostics = consoleErrors.filter(
+      (message) =>
+        /inline.*script|script.*inline/i.test(message) &&
+        /Content.Security.Policy|script-src/i.test(message),
+    );
+    expect(providerDiagnostics.length).toBeLessThanOrEqual(inline.length * 2);
+    if (providerDiagnostics.length)
+      await testInfo.attach('blocked pinned Cloudflare challenge', {
+        body: JSON.stringify({ inline, providerDiagnostics }, null, 2),
+        contentType: 'application/json',
+      });
+    expect(consoleErrors.filter((message) => !providerDiagnostics.includes(message))).toEqual([]);
+  } else expect(consoleErrors).toEqual([]);
   expect(failedRequests).toEqual([]);
 });
 
