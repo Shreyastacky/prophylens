@@ -27,8 +27,8 @@ export default {
       request.headers
         .get('If-None-Match')
         ?.split(',')
-        .map((value) => value.trim())
-        .includes(headers.get('ETag'))
+        .map((value) => value.trim().replace(/^W\//, ''))
+        .some((value) => value === '*' || value === headers.get('ETag'))
     )
       return new Response(null, { status: 304, headers });
     if (request.method === 'HEAD') return new Response(null, { headers });
