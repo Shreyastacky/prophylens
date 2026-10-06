@@ -1,4 +1,4 @@
-# Public alpha release 0.1.2-alpha — 2026-10-05
+# Public alpha release 0.1.3-alpha — 2026-10-05
 
 This release makes the current local chess review product usable publicly. It does not certify the research roadmap.
 
@@ -42,7 +42,7 @@ Labels have synthetic golden tests for mate transitions, missing/bounded scores 
 ## Maintainer release procedure
 
 1. Start from current main. Run npm ci, npm run check, and production browser journeys.
-2. Merge after CI passes; wait for CI on main to pass. Tag that exact main commit (v0.1.2-alpha for this release), build once from the clean tagged commit and preserve that output. Verify engine checksums and dist/release.json against the tag.
+2. Merge after CI passes; wait for CI on main to pass. Tag that exact main commit (v0.1.3-alpha for this release), build once from the clean tagged commit and preserve that output. Verify engine checksums and dist/release.json against the tag.
 3. Copy the exact build to the opened Sites checkout, preserve its source identity, package without rebuilding, save the matching archive and deploy the saved version.
 4. Confirm public access, asset integrity, engine boot and the complete review/library/practice flow on the deployed origin.
 5. Record failures and limits honestly. Revert deployment if an essential journey fails.
