@@ -1,4 +1,4 @@
-# Public alpha release 0.1.3-alpha — 2026-10-05
+# Public alpha release 0.1.3-alpha — 2026-10-06
 
 This release makes the current local chess review product usable publicly. It does not certify the research roadmap.
 
@@ -6,12 +6,28 @@ This release makes the current local chess review product usable publicly. It do
 
 - Formatting, TypeScript, unit/integration assertions and production build are required for every release.
 - Dependency audit: zero known vulnerabilities at release.
-- Chromium and Firefox production browser journeys cover file/paste review, player/filter navigation, square boards at 390 × 844, cancellation/restart/repeated runs, storage failure, refresh recovery, backup/import/deletion, saved practice and automated accessibility.
+- Chromium, Firefox and WebKit production browser journeys cover file/paste review, player/filter navigation, square boards at 390 × 844, cancellation/restart/repeated runs, storage failure, refresh recovery, backup/import/deletion, saved practice and automated accessibility.
 - Historical pre-hardening local measurement. Full-game fixture: Fischer–Spassky, Reykjavik 1972 round 6, 81 half-moves, 10,000 nodes, MultiPV 2. Complete journey took 11.2 s in Chromium and 31.1 s in Firefox in the local test run. These include test overhead and are observations, not performance guarantees.
 - Test machine: Windows, AMD Ryzen 7 8845HS, 8 cores / 16 logical processors.
 - Fixture is the factual game score, without copied annotations. Reference: https://en.chessbase.com/post/50-years-ago-today-fischer-spassky-game-six
 - Engine JavaScript/WASM checksums remain pinned; the release manifest hashes every bundled asset.
-- Public deployment verification is performed separately after publication; the tagged release notes record the hosted run, sourceRevision and measured hashes. Hosted results are appended here after that run completes.
+- Hosted evidence for this tag is recorded below, separately from local and CI build verification.
+
+## Hosted verification — 2026-10-06
+
+- Public URL: https://prophylens.badakanadong.chatgpt.site
+- Immutable release tag: `v0.1.3-alpha`; GitHub source commit and live `release.json.sourceRevision`: `8301bd2a26f3e8123fbb93a4002748917fd893c8`. Live manifest and exported receipts report `0.1.3-alpha` from the root package version.
+- Built once from the clean tagged main commit. Packaging preserved its output. All 119 tracked source files and 33 build assets matched the publishing checkout; archive inspection confirmed Worker mode and the exact Worker entrypoint before deployment.
+- [Main CI for the tagged source](https://github.com/Shreyastacky/prophylens/actions/runs/37415496537): npm ci, npm run check (62 unit/integration tests) and npm run test:e2e (66 cases across Chromium, Firefox and WebKit) passed.
+- Live HTTP verification at `2026-10-06T04:58:20.993Z`: all 33 manifest assets matched. HTML comparison removed only the pinned Cloudflare challenge; all other bytes matched. Both engine files matched the tag's pinned manifest and the published release manifest.
+- Engine JavaScript SHA-256: `2278005057f381491f1c9bb3e44c9f5920b3a00bef9759e33cc6582769a1f1fe`.
+- Engine WASM SHA-256: `a8fbc05ec6920b56d7485826dcb02c5ffd2826bcbf751cf973046f237a9096f1`.
+- Real HTML/engine headers matched the shared COOP, COEP, CORP, CSP, nosniff and referrer policy. Meta CSP matched. WASM MIME was application/wasm; both engine files returned 304 on conditional requests with the required policies intact.
+- Public-origin Windows Chromium: all 22 tests passed in 1.3 minutes. This included completed review, automatic save, reload, practice, export, deletion and backup import; saved attempts survived restoration. Modified JavaScript/WASM failed before execution and recovered on a clean retry. Board geometry, scoped keys, Good alternatives, 600-half-move navigation, cancellation and automated accessibility also passed.
+- Full Linux production-browser results and downloadable evidence: [hosted Chromium, Firefox and WebKit workflow](https://github.com/Shreyastacky/prophylens/actions/runs/37416279066), dispatched from the tagged source with its exact expected sourceRevision.
+- GitHub settings rechecked on 2026-10-06: private vulnerability reporting enabled. Main requires PRs, the GitHub Actions check, an up-to-date branch and resolved conversations; administrators cannot bypass it. Force pushes and branch deletion are disabled.
+
+The release tag identifies the deployed application source. Later release-evidence documentation commits do not move that tag or replace its published build.
 
 ## Release hardening
 
