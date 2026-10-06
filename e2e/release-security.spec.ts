@@ -7,6 +7,9 @@ test('production build serves real security headers, meta CSP and a complete lic
   page,
   request,
 }) => {
+  // The deploy packager must select the same Worker exercised by this suite.
+  const hosting = JSON.parse(readFileSync('.openai/hosting.json', 'utf8'));
+  expect(hosting.static).toBeUndefined();
   const response = await page.goto('/');
   for (const [name, value] of Object.entries(SECURITY_HEADERS))
     expect(response!.headers()[name.toLowerCase()]).toBe(value);
