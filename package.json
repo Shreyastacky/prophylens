@@ -1,11 +1,11 @@
 {
   "name": "prophylens",
-  "version": "0.0.0",
+  "version": "0.1.3-alpha",
   "private": true,
-  "description": "A local-first, peer-calibrated chess improvement system.",
+  "description": "Local-first chess review and practice from your own completed games.",
   "license": "AGPL-3.0-or-later",
   "engines": {
-    "node": ">=22",
+    "node": ">=22.12",
     "npm": ">=11"
   },
   "workspaces": [
@@ -14,7 +14,7 @@
   ],
   "scripts": {
     "dev": "npm run dev --workspace @prophylens/web",
-    "build": "npm run build --workspaces --if-present",
+    "build": "node scripts/build-release.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "test:e2e": "playwright test",
@@ -23,11 +23,12 @@
     "check": "npm run format:check && npm run typecheck && npm run test && npm run build"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.11.1",
     "@playwright/test": "^1.62.1",
     "@types/node": "^26.4.0",
     "prettier": "^3.6.2",
     "typescript": "^5.9.2",
     "vite": "^7.1.2",
-    "vitest": "^3.2.4"
+    "vitest": "4.1.11"
   }
 }

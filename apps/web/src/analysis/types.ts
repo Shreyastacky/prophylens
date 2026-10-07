@@ -1,3 +1,4 @@
+import engineManifest from '../../../../public/engine/manifest.json';
 export type SideToMove = 'white' | 'black';
 
 export interface GamePosition {
@@ -21,6 +22,7 @@ export interface EngineLine {
   nodes: number;
   scoreCp?: number;
   mateIn?: number;
+  scoreBound?: 'exact' | 'lower' | 'upper';
   wdl?: { win: number; draw: number; loss: number };
   movesUci: string[];
 }
@@ -42,7 +44,8 @@ export interface AnalysisSettings {
 }
 
 export interface AnalysisRun {
-  schemaVersion: 2;
+  schemaVersion: 3;
+  pgn: string;
   createdAt: string;
   pgnSha256: string;
   game: {
@@ -62,16 +65,33 @@ export interface AnalysisRun {
     hashMb: 16;
     nodesPerPosition: number;
     multiPv: number;
-    classifierVersion: 'move-loss-v1';
+    classifierVersion: 'move-loss-v1' | 'move-loss-v2';
+    appVersion: string;
+    sourceRevision: string;
   };
   positions: PositionAnalysis[];
 }
 
+export type PlayerSide = SideToMove | 'both';
+export interface PracticeAttempt {
+  ply: number;
+  moveUci: string;
+  correct: boolean;
+  attemptedAt: string;
+  comparison?: { bestMoveUci: string; bestLine: EngineLine; playedLine: EngineLine };
+}
+export interface LibraryGame {
+  schemaVersion: 1;
+  id: string;
+  pgn: string;
+  analysis: AnalysisRun;
+  player: PlayerSide;
+  updatedAt: string;
+  attempts: PracticeAttempt[];
+}
+
 export const ENGINE_ASSET = {
+  ...engineManifest,
   workerUrl: `${import.meta.env.BASE_URL}engine/stockfish-18-lite-single.js`,
-  upstreamRelease: 'nmrugg/stockfish.js v18.0.0',
-  upstreamStockfishCommit: 'cb3d4ee',
-  evaluationNetwork: 'nn-9067e33176e8.nnue',
-  scriptSha256: '2278005057f381491f1c9bb3e44c9f5920b3a00bef9759e33cc6582769a1f1fe',
-  wasmSha256: 'a8fbc05ec6920b56d7485826dcb02c5ffd2826bcbf751cf973046f237a9096f1',
+  wasmUrl: `${import.meta.env.BASE_URL}engine/stockfish-18-lite-single.wasm`,
 } as const;

@@ -1,606 +1,842 @@
-import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
-
-import { assessMove, type MoveAssessment } from './analysis/classification';
-import { parseGame } from './analysis/pgn';
-import { downloadAnalysis, saveLastAnalysis, sha256 } from './analysis/storage';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { parsePgnAsync } from './analysis/parseAsync';
+import { MAX_PGN_BYTES, splitPgnGames } from './analysis/pgn';
 import { StockfishClient } from './analysis/stockfish';
-import type { AnalysisRun, AnalysisSettings, PositionAnalysis } from './analysis/types';
-import { ENGINE_ASSET } from './analysis/types';
-import { Chessboard, moveToSan } from './Chessboard';
-
-const examplePgn = `[Event "Example"]
-[White "You"]
-[Black "Training Partner"]
-[Result "*"]
-
-1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 *`;
-
-const MAX_PGN_FILE_BYTES = 2 * 1024 * 1024;
-
-type EngineStatus = 'idle' | 'loading' | 'ready' | 'analysing' | 'cancelled' | 'complete' | 'error';
-type ReviewFilter = 'all' | 'key';
-
-interface ProgressState {
-  completed: number;
-  total: number;
-  nodes: number;
-  move: string;
-}
-
-function moveNumber(ply: number): string {
-  return ply % 2 === 1 ? `${Math.ceil(ply / 2)}.` : `${Math.ceil(ply / 2)}...`;
-}
-
-function statusLabel(status: EngineStatus): string {
-  const labels: Record<EngineStatus, string> = {
-    idle: 'Engine idle',
-    loading: 'Loading engine',
-    ready: 'Engine ready',
-    analysing: 'Analysing locally',
-    cancelled: 'Analysis cancelled',
-    complete: 'Analysis complete',
-    error: 'Engine error',
-  };
-  return labels[status];
-}
-
-function formatLoss(assessment: MoveAssessment): string {
-  return assessment.centipawnLoss === undefined
-    ? 'Mate'
-    : `${(assessment.centipawnLoss / 100).toFixed(2)}`;
-}
-
-function severityScore(assessment: MoveAssessment): number {
-  return assessment.expectedScoreLoss ?? (assessment.centipawnLoss ?? 0) / 1000;
-}
-
+import {
+  clearLibrary,
+  corruptRecordCount,
+  downloadAnalysis,
+  downloadLibrary,
+  downloadPgn,
+  importGames,
+  listGames,
+  makeLibraryGame,
+  MAX_LIBRARY_FILE_BYTES,
+  migrateLegacy,
+  readLibraryFile,
+  removeGame,
+  saveGame,
+  sha256,
+} from './analysis/storage';
+import {
+  ENGINE_ASSET,
+  type AnalysisRun,
+  type AnalysisSettings,
+  type LibraryGame,
+  type ParsedGame,
+  type PlayerSide,
+  type PositionAnalysis,
+  type PracticeAttempt,
+} from './analysis/types';
+import { Review } from './Review';
+import { Practice } from './Practice';
+import { Appearance } from './Appearance';
+import { GamePreview } from './GamePreview';
+import { ShieldCheck } from '@phosphor-icons/react/dist/csr/ShieldCheck';
+import { UploadSimple } from '@phosphor-icons/react/dist/csr/UploadSimple';
+import { ArrowUpRight } from '@phosphor-icons/react/dist/csr/ArrowUpRight';
+const examplePgn =
+  '[Event "Sample game"]\n[White "You"]\n[Black "Training Partner"]\n[Result "0-1"]\n\n1. f3 e5 2. g4 Qh4# 0-1';
+type Status = 'idle' | 'loading' | 'ready' | 'analysing' | 'cancelled' | 'complete' | 'error';
+const labels: Record<Status, string> = {
+  idle: 'Engine idle',
+  loading: 'Loading engine',
+  ready: 'Engine ready',
+  analysing: 'Analysing locally',
+  cancelled: 'Analysis cancelled',
+  complete: 'Analysis complete',
+  error: 'Engine error',
+};
 export function App() {
-  const [pgn, setPgn] = useState(examplePgn);
-  const [settings, setSettings] = useState<AnalysisSettings>({ nodes: 10_000, multiPv: 2 });
-  const [status, setStatus] = useState<EngineStatus>('idle');
-  const [engineName, setEngineName] = useState('Stockfish 18 Lite');
-  const [results, setResults] = useState<PositionAnalysis[]>([]);
-  const [selectedPly, setSelectedPly] = useState<number | null>(null);
-  const [run, setRun] = useState<AnalysisRun | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [fileError, setFileError] = useState<string | null>(null);
-  const [importedFileName, setImportedFileName] = useState<string | null>(null);
-  const [reviewFilter, setReviewFilter] = useState<ReviewFilter>('all');
-  const [progress, setProgress] = useState<ProgressState>({
-    completed: 0,
-    total: 0,
-    nodes: 0,
-    move: '',
-  });
-  const clientRef = useRef<StockfishClient | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
-
-  const parsed = useMemo(() => {
-    try {
-      return { error: null, game: parseGame(pgn) };
-    } catch (error) {
-      return {
-        error: error instanceof Error ? error.message : 'Unable to parse PGN',
-        game: null,
-      };
-    }
+  const [pgn, setPgn] = useState(examplePgn),
+    [parsed, setParsed] = useState<ParsedGame | null>(null),
+    [parseError, setParseError] = useState<string | null>(null),
+    [validating, setValidating] = useState(true);
+  const [parsedSource, setParsedSource] = useState<string | null>(null);
+  const [settings, setSettings] = useState<AnalysisSettings>({ nodes: 10000, multiPv: 2 }),
+    [status, setStatus] = useState<Status>('idle'),
+    [engineName, setEngineName] = useState('Stockfish 18 Lite');
+  const [results, setResults] = useState<PositionAnalysis[]>([]),
+    [run, setRun] = useState<AnalysisRun | null>(null),
+    [games, setGames] = useState<LibraryGame[]>([]),
+    [active, setActive] = useState<LibraryGame | null>(null),
+    [player, setPlayer] = useState<PlayerSide>('both');
+  const [error, setError] = useState<string | null>(null),
+    [warning, setWarning] = useState<string | null>(null),
+    [fileError, setFileError] = useState<string | null>(null),
+    [notice, setNotice] = useState<string | null>(null),
+    [fileName, setFileName] = useState<string | null>(null);
+  const [queue, setQueue] = useState<string[]>([]),
+    [progress, setProgress] = useState({
+      completed: 0,
+      total: 0,
+      nodes: 0,
+      move: '',
+      game: 1,
+      count: 1,
+    }),
+    [libraryReady, setLibraryReady] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const clientRef = useRef<StockfishClient | null>(null),
+    abortRef = useRef<AbortController | null>(null),
+    operation = useRef(0);
+  const focusReview = useRef(false);
+  const [importing, setImporting] = useState<'pgn' | 'backup' | 'delete' | null>(null);
+  const busy = importing !== null || status === 'loading' || status === 'analysing';
+  const parsedMatches = parsed !== null && parsedSource === pgn;
+  const showReview = results.length > 0 && !busy;
+  useEffect(() => {
+    if (!showReview || status !== 'complete' || !focusReview.current) return;
+    focusReview.current = false;
+    const heading = document.getElementById('results-heading');
+    heading?.scrollIntoView({ block: 'start', behavior: 'instant' });
+    heading?.focus({ preventScroll: true });
+  }, [showReview, status]);
+  function openGame(game: LibraryGame) {
+    operation.current++;
+    abortRef.current?.abort();
+    clientRef.current?.terminate();
+    clientRef.current = null;
+    setPgn(game.pgn);
+    setResults(game.analysis.positions);
+    setRun(game.analysis);
+    setActive(game);
+    setPlayer(game.player);
+    setQueue([]);
+    setFileName(null);
+    setStatus('complete');
+    setError(null);
+    setWarning(null);
+    setFileError(null);
+  }
+  useEffect(() => {
+    const abort = new AbortController();
+    setValidating(true);
+    setParsed(null);
+    setParseError(null);
+    const timer = setTimeout(() => {
+      try {
+        void parsePgnAsync(pgn, abort.signal)
+          .then((game) => {
+            if (!abort.signal.aborted) {
+              setParsed(game);
+              setParsedSource(pgn);
+              setValidating(false);
+            }
+          })
+          .catch((e) => {
+            if (!abort.signal.aborted) {
+              setParseError(e.message);
+              setValidating(false);
+            }
+          });
+      } catch (e) {
+        setParseError(e instanceof Error ? e.message : 'Unable to read PGN');
+        setValidating(false);
+      }
+    }, 150);
+    return () => {
+      clearTimeout(timer);
+      abort.abort();
+    };
   }, [pgn]);
-
+  useEffect(() => {
+    let mounted = true;
+    void (async () => {
+      let migrationWarning: string | null = null;
+      try {
+        await migrateLegacy();
+      } catch {
+        migrationWarning =
+          'An old receipt could not be migrated. Your original browser record was preserved.';
+      }
+      try {
+        const saved = await listGames();
+        if (mounted) {
+          setGames(saved);
+          if (saved[0]) openGame(saved[0]);
+          if (migrationWarning) setWarning(migrationWarning);
+          else if (corruptRecordCount)
+            setWarning(
+              `${corruptRecordCount} damaged record(s) were skipped. Valid games are still available. Clear library removes all records.`,
+            );
+        }
+      } catch (e) {
+        if (mounted)
+          setWarning(
+            e instanceof Error ? e.message : 'Browser storage unavailable. Downloads still work.',
+          );
+      } finally {
+        if (mounted) setLibraryReady(true);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
   useEffect(
     () => () => {
+      operation.current++;
       abortRef.current?.abort();
       clientRef.current?.terminate();
     },
     [],
   );
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target?.matches('textarea, input, select')) return;
-      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-      setSelectedPly((current) => {
-        const index = Math.max(
-          0,
-          results.findIndex((result) => result.ply === current),
-        );
-        const nextIndex =
-          event.key === 'ArrowLeft'
-            ? Math.max(0, index - 1)
-            : Math.min(results.length - 1, index + 1);
-        return results[nextIndex]?.ply ?? current;
-      });
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [results]);
-
-  const ensureClient = () => {
-    if (!clientRef.current) clientRef.current = new StockfishClient();
-    return clientRef.current;
-  };
-
-  const replacePgn = (nextPgn: string, fileName: string | null) => {
-    setPgn(nextPgn);
-    setImportedFileName(fileName);
-    setFileError(null);
-    setErrorMessage(null);
+  function replacePgn(next: string, name: string | null) {
+    if (next !== pgn) {
+      setValidating(true);
+      setParsed(null);
+      setParsedSource(null);
+      setParseError(null);
+    }
+    setPgn(next);
+    setFileName(name);
+    setQueue([]);
     setResults([]);
-    setSelectedPly(null);
     setRun(null);
-    setReviewFilter('all');
-    setProgress({ completed: 0, total: 0, nodes: 0, move: '' });
-    setStatus(clientRef.current ? 'ready' : 'idle');
-  };
-
-  const importPgnFile = async (event: ChangeEvent<HTMLInputElement>) => {
-    const input = event.currentTarget;
-    const file = input.files?.[0];
-    input.value = '';
+    setActive(null);
+    setFileError(null);
+    setError(null);
+    setNotice(null);
+    setStatus('idle');
+  }
+  async function importPgn(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = '';
     if (!file) return;
-
     if (!file.name.toLowerCase().endsWith('.pgn')) {
       setFileError('Choose a file ending in .pgn.');
       return;
     }
-    if (file.size > MAX_PGN_FILE_BYTES) {
+    if (file.size > MAX_PGN_BYTES) {
       setFileError('That PGN is larger than the 2 MB safety limit.');
       return;
     }
-
+    const token = ++operation.current;
+    const abort = new AbortController();
+    abortRef.current = abort;
+    setFileError(null);
+    setNotice(null);
+    setImporting('pgn');
     try {
-      const contents = await file.text();
-      parseGame(contents);
-      replacePgn(contents, file.name);
-    } catch (error) {
-      setFileError(
-        error instanceof Error
-          ? `Could not import this PGN: ${error.message}`
-          : 'Could not import this PGN.',
-      );
+      const parts = splitPgnGames(await file.text());
+      for (const part of parts) await parsePgnAsync(part, abort.signal);
+      if (operation.current !== token || abort.signal.aborted) return;
+      replacePgn(parts[0]!, file.name);
+      setQueue(parts.slice(1));
+      if (parts.length > 1)
+        setNotice(`${parts.length} games ready. Analyse game will review and save each in order.`);
+    } catch (e) {
+      if (operation.current === token && !abort.signal.aborted)
+        setFileError(e instanceof Error ? e.message : 'Could not import PGN.');
+    } finally {
+      if (operation.current === token) {
+        abortRef.current = null;
+        setImporting(null);
+      }
     }
-  };
-
-  const restartEngine = async () => {
+  }
+  function cancel() {
+    operation.current++;
     abortRef.current?.abort();
-    clientRef.current?.terminate();
-    clientRef.current = new StockfishClient();
-    setStatus('loading');
-    setErrorMessage(null);
-    try {
-      setEngineName(await clientRef.current.initialize());
-      setStatus('ready');
-    } catch (error) {
-      setStatus('error');
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to restart Stockfish.');
+    abortRef.current = null;
+    if (importing === 'pgn') {
+      setImporting(null);
+      setNotice('PGN import cancelled. Your current game was kept.');
+      return;
     }
-  };
-
-  const cancelAnalysis = () => {
-    abortRef.current?.abort();
     clientRef.current?.terminate();
     clientRef.current = null;
     setStatus('cancelled');
-  };
-
-  const startAnalysis = async () => {
-    if (!parsed.game) return;
-
-    const abortController = new AbortController();
-    abortRef.current = abortController;
-    setResults([]);
-    setSelectedPly(null);
-    setRun(null);
-    setReviewFilter('all');
-    setErrorMessage(null);
+  }
+  async function restart() {
+    cancel();
+    const token = ++operation.current;
+    const client = new StockfishClient();
+    clientRef.current = client;
     setStatus('loading');
-    setProgress({ completed: 0, total: parsed.game.positions.length, nodes: 0, move: '' });
-
+    setError(null);
     try {
-      const client = ensureClient();
-      const initializedEngineName = await client.initialize();
-      setEngineName(initializedEngineName);
-      setStatus('analysing');
-
-      const completedResults: PositionAnalysis[] = [];
-      for (const position of parsed.game.positions) {
-        if (abortController.signal.aborted) throw new DOMException('Cancelled', 'AbortError');
-        setProgress((current) => ({ ...current, nodes: 0, move: position.san }));
-        const result = await client.analysePosition(
-          position,
-          settings,
-          abortController.signal,
-          (nodes) => setProgress((current) => ({ ...current, nodes })),
+      const name = await client.initialize();
+      if (operation.current === token) {
+        setEngineName(name);
+        setStatus('ready');
+      }
+    } catch (e) {
+      if (operation.current === token) {
+        setStatus('error');
+        setError(e instanceof Error ? e.message : 'Unable to restart the engine.');
+      }
+    }
+  }
+  async function analyse() {
+    if (!parsed || !parsedMatches || validating || busy || !libraryReady) return;
+    focusReview.current = true;
+    const token = ++operation.current,
+      abort = new AbortController();
+    abortRef.current = abort;
+    const batch = [pgn, ...queue];
+    setError(null);
+    setWarning(null);
+    setRun(null);
+    setResults([]);
+    setStatus('loading');
+    setConfirmDelete(null);
+    try {
+      for (let index = 0; index < batch.length; index++) {
+        if (abort.signal.aborted) throw new DOMException('Cancelled', 'AbortError');
+        const source = batch[index]!,
+          game = index === 0 ? parsed : await parsePgnAsync(source, abort.signal);
+        clientRef.current?.terminate();
+        const client = new StockfishClient();
+        clientRef.current = client;
+        setPgn(source);
+        setResults([]);
+        setRun(null);
+        setProgress({
+          completed: 0,
+          total: game.positions.length,
+          nodes: 0,
+          move: '',
+          game: index + 1,
+          count: batch.length,
+        });
+        const name = await client.initialize();
+        if (abort.signal.aborted || token !== operation.current)
+          throw new DOMException('Cancelled', 'AbortError');
+        setEngineName(name);
+        setStatus('analysing');
+        const completed: PositionAnalysis[] = [];
+        for (const position of game.positions) {
+          if (abort.signal.aborted) throw new DOMException('Cancelled', 'AbortError');
+          setProgress((current) => ({ ...current, nodes: 0, move: position.san }));
+          const result = await client.analysePosition(position, settings, abort.signal, (nodes) => {
+            if (operation.current === token) setProgress((current) => ({ ...current, nodes }));
+          });
+          completed.push(result);
+          setResults([...completed]);
+          setProgress((current) => ({ ...current, completed: completed.length }));
+        }
+        const finished: AnalysisRun = {
+          schemaVersion: 3,
+          pgn: source,
+          createdAt: new Date().toISOString(),
+          pgnSha256: await sha256(source),
+          game: { headers: game.headers, plies: completed.length },
+          positions: completed,
+          provenance: {
+            engine: 'Stockfish',
+            engineVersion: name,
+            distribution: 'Stockfish.js 18 lite single-threaded',
+            upstreamRelease: ENGINE_ASSET.upstreamRelease,
+            upstreamStockfishCommit: ENGINE_ASSET.upstreamStockfishCommit,
+            evaluationNetwork: ENGINE_ASSET.evaluationNetwork,
+            scriptSha256: ENGINE_ASSET.scriptSha256,
+            wasmSha256: ENGINE_ASSET.wasmSha256,
+            threads: 1,
+            hashMb: 16,
+            nodesPerPosition: settings.nodes,
+            multiPv: settings.multiPv,
+            classifierVersion: 'move-loss-v2',
+            appVersion: import.meta.env.VITE_APP_VERSION ?? 'development',
+            sourceRevision: import.meta.env.VITE_SOURCE_REVISION ?? 'development',
+          },
+        };
+        if (operation.current !== token) return;
+        // Completion is independent of storage: export remains available if saving fails.
+        setRun(finished);
+        const made = await makeLibraryGame(finished, player, active ?? undefined);
+        const record = {
+          ...made,
+          attempts: games.find((g) => g.id === made.id)?.attempts ?? made.attempts,
+        };
+        setActive(record);
+        try {
+          await saveGame(record);
+          const saved = await listGames();
+          if (operation.current === token) setGames(saved);
+        } catch (e) {
+          if (operation.current === token)
+            setWarning(
+              e instanceof Error
+                ? e.message
+                : 'Could not save. Download your review before leaving.',
+            );
+        }
+      }
+      if (operation.current === token) {
+        setStatus('complete');
+        setQueue([]);
+        setNotice(
+          batch.length > 1
+            ? `Reviewed ${batch.length} games. Check the library for saved reviews.`
+            : null,
         );
-        completedResults.push(result);
-        setResults([...completedResults]);
-        setSelectedPly((current) => current ?? result.ply);
-        setProgress((current) => ({ ...current, completed: completedResults.length }));
       }
-
-      const finishedRun: AnalysisRun = {
-        schemaVersion: 2,
-        createdAt: new Date().toISOString(),
-        pgnSha256: await sha256(pgn),
-        game: { headers: parsed.game.headers, plies: parsed.game.positions.length },
-        provenance: {
-          engine: 'Stockfish',
-          engineVersion: initializedEngineName,
-          distribution: 'Stockfish.js 18 lite single-threaded',
-          upstreamRelease: ENGINE_ASSET.upstreamRelease,
-          upstreamStockfishCommit: ENGINE_ASSET.upstreamStockfishCommit,
-          evaluationNetwork: ENGINE_ASSET.evaluationNetwork,
-          scriptSha256: ENGINE_ASSET.scriptSha256,
-          wasmSha256: ENGINE_ASSET.wasmSha256,
-          threads: 1,
-          hashMb: 16,
-          nodesPerPosition: settings.nodes,
-          multiPv: settings.multiPv,
-          classifierVersion: 'move-loss-v1',
-        },
-        positions: completedResults,
-      };
-
-      saveLastAnalysis(finishedRun);
-      setRun(finishedRun);
-      const mostCostly = completedResults.reduce<PositionAnalysis | null>((worst, result) => {
-        if (!worst) return result;
-        return severityScore(assessMove(result)) > severityScore(assessMove(worst))
-          ? result
-          : worst;
-      }, null);
-      setSelectedPly(mostCostly?.ply ?? null);
-      setStatus('complete');
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        setStatus('cancelled');
-        return;
+    } catch (e) {
+      if (operation.current !== token) return;
+      if (e instanceof DOMException && e.name === 'AbortError') setStatus('cancelled');
+      else {
+        setStatus('error');
+        setError(
+          e instanceof Error ? e.message : 'Analysis failed. Restart the engine and try again.',
+        );
+        clientRef.current?.terminate();
+        clientRef.current = null;
       }
-      setStatus('error');
-      setErrorMessage(error instanceof Error ? error.message : 'Analysis failed unexpectedly.');
-      clientRef.current?.terminate();
-      clientRef.current = null;
     } finally {
-      abortRef.current = null;
+      if (operation.current === token) abortRef.current = null;
     }
-  };
-
-  const totalProgress = progress.total
-    ? ((progress.completed + Math.min(progress.nodes / (settings.nodes * 2), 1)) / progress.total) *
-      100
+  }
+  async function persist(record: LibraryGame) {
+    setActive(record);
+    setGames((current) => current.map((g) => (g.id === record.id ? record : g)));
+    try {
+      await saveGame(record);
+    } catch (e) {
+      setWarning(e instanceof Error ? e.message : 'Could not save changes. Export a backup.');
+    }
+  }
+  function changePlayer(side: PlayerSide) {
+    setPlayer(side);
+    if (active) void persist({ ...active, player: side, updatedAt: new Date().toISOString() });
+  }
+  async function recordAttempt(game: LibraryGame, attempt: PracticeAttempt) {
+    const next = {
+      ...game,
+      attempts: [...game.attempts, attempt],
+      updatedAt: new Date().toISOString(),
+    };
+    setGames((current) => current.map((g) => (g.id === game.id ? next : g)));
+    if (active?.id === game.id) setActive(next);
+    try {
+      await saveGame(next);
+    } catch {
+      setWarning(
+        'Practice was recorded for this session, but could not be saved. Export a library backup before leaving.',
+      );
+    }
+  }
+  async function importBackup(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = '';
+    if (!file) return;
+    if (file.size > MAX_LIBRARY_FILE_BYTES) {
+      setWarning('The backup exceeds the 20 MB limit.');
+      return;
+    }
+    setImporting('backup');
+    try {
+      const records = await readLibraryFile(await file.text());
+      await importGames(records);
+      const saved = await listGames();
+      setGames(saved);
+      if (records[0]) openGame(saved.find((g) => g.id === records[0]!.id)!);
+      setNotice(`Imported ${records.length} review(s). Duplicate games were combined.`);
+    } catch (e) {
+      setWarning(e instanceof Error ? e.message : 'Could not import backup.');
+    } finally {
+      setImporting(null);
+    }
+  }
+  async function deleteConfirmed(id: string) {
+    setImporting('delete');
+    try {
+      if (id === 'all') {
+        await clearLibrary();
+        setGames([]);
+      } else {
+        await removeGame(id);
+        setGames(await listGames());
+      }
+      if (id === 'all' || active?.id === id) {
+        setActive(null);
+        setRun(null);
+        setResults([]);
+        setStatus('idle');
+      }
+      setConfirmDelete(null);
+    } catch (e) {
+      setWarning(e instanceof Error ? e.message : 'Could not delete game.');
+    } finally {
+      setImporting(null);
+    }
+  }
+  const progressPercent = progress.total
+    ? Math.min(100, (progress.completed / progress.total) * 100)
     : 0;
-
-  const reviewedResults = useMemo(
-    () => results.map((result) => ({ result, assessment: assessMove(result) })),
-    [results],
-  );
-  const keyReviews = reviewedResults.filter(
-    ({ assessment }) => assessment.label !== 'Best' && assessment.label !== 'Good',
-  );
-  const visibleReviews = reviewFilter === 'key' ? keyReviews : reviewedResults;
-  const selectedIndex = Math.max(
-    0,
-    visibleReviews.findIndex(({ result }) => result.ply === selectedPly),
-  );
-  const selectedReview = visibleReviews[selectedIndex] ?? null;
-  const selectedResult = selectedReview?.result ?? null;
-  const averageLoss =
-    reviewedResults.length === 0
-      ? 0
-      : reviewedResults.reduce(
-          (total, { assessment }) => total + (assessment.centipawnLoss ?? 0),
-          0,
-        ) / reviewedResults.length;
-  const largestLoss = reviewedResults.reduce<(typeof reviewedResults)[number] | null>(
-    (largest, review) =>
-      !largest || severityScore(review.assessment) > severityScore(largest.assessment)
-        ? review
-        : largest,
-    null,
-  );
-
-  const changeReviewFilter = (filter: ReviewFilter) => {
-    setReviewFilter(filter);
-    const nextReviews = filter === 'key' ? keyReviews : reviewedResults;
-    if (!nextReviews.some(({ result }) => result.ply === selectedPly)) {
-      setSelectedPly(nextReviews[0]?.result.ply ?? null);
-    }
-  };
-
+  const libraryBytes = new TextEncoder().encode(JSON.stringify(games)).length;
   return (
     <main>
+      <a className="skip-link" href="#import-heading">
+        Skip to game import
+      </a>
       <nav className="nav" aria-label="Primary navigation">
-        <a className="brand" href="#top" aria-label="ProphyLens home">
+        <a className="brand" href="#top">
           <span className="brand-mark" aria-hidden="true">
             P
           </span>
-          <span>ProphyLens</span>
+          <span>
+            ProphyLens <small>ALPHA</small>
+          </span>
         </a>
-        <span className={`status status-${status}`}>{statusLabel(status)}</span>
+        <div className="nav-links">
+          <a href="#library">Library</a>
+          <a href="#practice">Practice</a>
+          <Appearance />
+          <span className={`status status-${status}`} role="status">
+            {labels[status]}
+          </span>
+        </div>
       </nav>
-
       <section className="hero" id="top">
         <div className="hero-copy">
-          <div className="eyebrow">PRIVATE CHESS REVIEW</div>
+          <div className="eyebrow">YOUR PRIVATE CHESS STUDIO</div>
           <h1>Find the moves that changed your game.</h1>
           <p>
-            Import a finished game and compare every move with Stockfish—without sending the PGN
-            away from your device.
+            Review completed games with Stockfish, keep your work in this browser, and practise the
+            moves you missed.
           </p>
+          <a className="studio-shortcut secondary-button" href="#import-heading">
+            New review <ArrowUpRight size={15} aria-hidden="true" />
+          </a>
         </div>
-        <div className="hero-proof" aria-label="Product principles">
-          <div>
-            <strong>Local</strong>
-            <span>Your game stays in this browser</span>
-          </div>
-          <div>
-            <strong>Explainable</strong>
-            <span>Every label keeps its engine evidence</span>
-          </div>
-          <div>
-            <strong>Open source</strong>
-            <span>Inspect the code and the calculation receipt</span>
-          </div>
+        <div className="privacy-chip">
+          <ShieldCheck size={18} aria-hidden="true" />
+          <span>
+            On your device.
+            <br />
+            <strong>In your control.</strong>
+          </span>
         </div>
       </section>
-
-      <section className="workspace" aria-labelledby="import-heading">
-        <div>
-          <p className="step">01 / IMPORT AND CALCULATE</p>
-          <h2 id="import-heading">Import your game</h2>
-          <p className="muted">
-            Start with Quick analysis. Increase the node budget only when you want a slower, more
-            stable second opinion.
-          </p>
-
-          <div className="settings" aria-label="Analysis settings">
-            <label>
-              Nodes per position
-              <select
-                value={settings.nodes}
-                onChange={(event) =>
-                  setSettings((current) => ({ ...current, nodes: Number(event.target.value) }))
-                }
-                disabled={status === 'analysing' || status === 'loading'}
-              >
-                <option value={10_000}>10,000 · quick</option>
-                <option value={50_000}>50,000 · balanced</option>
-                <option value={100_000}>100,000 · deeper</option>
-              </select>
-            </label>
-            <label>
-              Candidate lines
-              <select
-                value={settings.multiPv}
-                onChange={(event) =>
-                  setSettings((current) => ({ ...current, multiPv: Number(event.target.value) }))
-                }
-                disabled={status === 'analysing' || status === 'loading'}
-              >
-                <option value={1}>1 line</option>
-                <option value={2}>2 lines</option>
-                <option value={3}>3 lines</option>
-              </select>
-            </label>
+      <div className={`studio-stage ${showReview ? 'has-review' : 'is-preview'}`}>
+        <section className="results" aria-labelledby="results-heading">
+          <div className="results-header">
+            <div>
+              <p className="step">{showReview ? 'Move review' : 'Game preview'}</p>
+              <h2 id="results-heading" tabIndex={-1}>
+                {showReview ? 'See what changed when you moved.' : 'Your board. Your next insight.'}
+              </h2>
+            </div>
+            {run && (
+              <div className="actions">
+                <button className="secondary-button" onClick={() => downloadAnalysis(run)}>
+                  Download evidence
+                </button>
+                <button className="text-button" onClick={() => downloadPgn(run)}>
+                  Export PGN
+                </button>
+              </div>
+            )}
           </div>
-        </div>
-
-        <div className="import-panel">
-          <div className="file-import">
+          {showReview ? (
+            <Review results={results} player={player} onPlayer={changePlayer} />
+          ) : (
+            <GamePreview game={parsedMatches ? parsed : null} />
+          )}
+          {run && showReview && (
+            <div className="receipt">
+              <strong>Analysis receipt</strong>
+              <span>{run.provenance.engineVersion}</span>
+              <span>{run.provenance.nodesPerPosition.toLocaleString()} nodes per position</span>
+              <span>MultiPV {run.provenance.multiPv}</span>
+              <span>Current labels: move-loss-v2</span>
+              <span>
+                {games.some((g) => g.id === active?.id)
+                  ? 'Saved locally in this browser'
+                  : 'In memory · download to keep'}
+              </span>
+            </div>
+          )}
+        </section>
+        <section className="workspace" aria-labelledby="import-heading">
+          <div>
+            <p className="step">A NEW REVIEW</p>
+            <h2 id="import-heading">Import your game</h2>
+            <p className="muted">
+              Start with Quick analysis. For close decisions, use a deeper second opinion. Standard
+              chess · post-game study only.
+            </p>
+            <div className="settings" aria-label="Analysis settings">
+              <label>
+                Nodes per position
+                <select
+                  value={settings.nodes}
+                  onChange={(e) => setSettings((s) => ({ ...s, nodes: Number(e.target.value) }))}
+                  disabled={busy}
+                >
+                  <option value="10000">10,000 · quick</option>
+                  <option value="50000">50,000 · balanced</option>
+                  <option value="100000">100,000 · deeper</option>
+                </select>
+              </label>
+              <label>
+                Candidate lines
+                <select
+                  value={settings.multiPv}
+                  onChange={(e) => setSettings((s) => ({ ...s, multiPv: Number(e.target.value) }))}
+                  disabled={busy}
+                >
+                  <option value="1">1 line</option>
+                  <option value="2">2 lines</option>
+                  <option value="3">3 lines</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          <div className="import-panel">
+            <div className="file-import">
+              <label className="secondary-button file-button">
+                <input
+                  type="file"
+                  accept=".pgn,application/x-chess-pgn"
+                  aria-label="Choose PGN file"
+                  onChange={(e) => void importPgn(e)}
+                  disabled={busy || !libraryReady}
+                />
+                <UploadSimple size={17} aria-hidden="true" /> Choose .pgn file
+              </label>
+              <span>
+                {fileName
+                  ? `${fileName} loaded locally`
+                  : 'Maximum 2 MB · up to 100 games · never uploaded'}
+              </span>
+            </div>
+            {fileError && (
+              <small className="parse-error" role="alert">
+                {fileError}
+              </small>
+            )}
+            <label className="pgn-field">
+              <span>PGN</span>
+              <textarea
+                value={pgn}
+                onChange={(e) => replacePgn(e.target.value, null)}
+                spellCheck={false}
+                disabled={busy}
+                maxLength={MAX_PGN_BYTES}
+              />
+              <small className={parseError ? 'parse-error' : 'parse-ok'}>
+                {validating
+                  ? 'Checking your game…'
+                  : (parseError ??
+                    `${parsed?.positions.length ?? 0} half-moves ready for local analysis`)}
+              </small>
+            </label>
+            <div className="actions">
+              <button
+                className="primary-button"
+                onClick={() => void analyse()}
+                disabled={!parsedMatches || validating || busy || !libraryReady}
+              >
+                Analyse game <ArrowUpRight size={17} aria-hidden="true" />
+              </button>
+              {busy && (importing === null || importing === 'pgn') ? (
+                <button className="secondary-button" onClick={cancel}>
+                  Cancel
+                </button>
+              ) : !busy ? (
+                <>
+                  <button className="secondary-button" onClick={() => void restart()}>
+                    Restart engine
+                  </button>
+                  <button className="text-button" onClick={() => replacePgn(examplePgn, null)}>
+                    Load sample
+                  </button>
+                </>
+              ) : null}
+            </div>
+            {busy && (
+              <div className="progress-panel" aria-live="polite">
+                <div>
+                  <span>
+                    {importing === 'pgn'
+                      ? 'Reading your PGN file'
+                      : importing === 'backup'
+                        ? 'Restoring your library'
+                        : importing === 'delete'
+                          ? 'Updating your library'
+                          : status === 'loading'
+                            ? 'Loading the 7 MB engine'
+                            : `Analysing ${progress.move}`}
+                  </span>
+                  {!importing && (
+                    <span>
+                      {progress.completed}/{progress.total} positions
+                    </span>
+                  )}
+                </div>
+                <progress
+                  aria-label={importing ? 'Import progress' : 'Analysis progress'}
+                  value={importing ? undefined : progressPercent}
+                  max="100"
+                />
+                {!importing && (
+                  <small>
+                    Game {progress.game}/{progress.count} · {progress.nodes.toLocaleString()} nodes
+                    in this position
+                  </small>
+                )}
+              </div>
+            )}
+            {error && (
+              <p className="error-box" role="alert">
+                {error}
+              </p>
+            )}
+          </div>
+        </section>
+      </div>
+      {warning && (
+        <p className="storage-warning" role="alert">
+          {warning}
+          <button className="text-button" onClick={() => setWarning(null)}>
+            Dismiss
+          </button>
+        </p>
+      )}
+      {notice && (
+        <p className="notice" role="status">
+          {notice}
+        </p>
+      )}
+      <section id="library" className="library-section" aria-labelledby="library-heading">
+        <div className="results-header">
+          <div>
+            <p className="step">YOUR LOCAL LIBRARY</p>
+            <h2 id="library-heading">Your games, ready when you return.</h2>
+          </div>
+          <div className="actions">
+            <button
+              className="secondary-button"
+              disabled={!games.length || busy}
+              onClick={() => downloadLibrary(games)}
+            >
+              Export library
+            </button>
             <label className="secondary-button file-button">
               <input
                 type="file"
-                accept=".pgn,application/x-chess-pgn"
-                aria-label="Choose PGN file"
-                onChange={importPgnFile}
-                disabled={status === 'analysing' || status === 'loading'}
+                accept=".json,application/json"
+                aria-label="Import library backup"
+                disabled={busy}
+                onChange={(e) => void importBackup(e)}
               />
-              Choose .pgn file
+              Import backup
             </label>
-            <span>
-              {importedFileName
-                ? `${importedFileName} loaded locally`
-                : 'Maximum 2 MB · never uploaded'}
-            </span>
-          </div>
-          {fileError && (
-            <small className="parse-error" role="alert">
-              {fileError}
-            </small>
-          )}
-
-          <label className="pgn-field">
-            <span>PGN</span>
-            <textarea
-              value={pgn}
-              onChange={(event) => replacePgn(event.target.value, null)}
-              spellCheck="false"
-              disabled={status === 'analysing' || status === 'loading'}
-            />
-            <small className={parsed.error ? 'parse-error' : 'parse-ok'}>
-              {parsed.error ??
-                `${parsed.game?.positions.length ?? 0} half-moves ready for local analysis`}
-            </small>
-          </label>
-
-          <div className="actions">
             <button
-              className="primary-button"
-              onClick={startAnalysis}
-              disabled={!parsed.game || status === 'analysing' || status === 'loading'}
+              className="text-button"
+              disabled={!games.length || busy}
+              onClick={() => setConfirmDelete('all')}
             >
-              Analyse game
+              Clear library
             </button>
-            {(status === 'analysing' || status === 'loading') && (
-              <button className="secondary-button" onClick={cancelAnalysis}>
-                Cancel
-              </button>
-            )}
-            {status !== 'analysing' && status !== 'loading' && (
-              <button className="secondary-button" onClick={restartEngine}>
-                Restart engine
-              </button>
-            )}
           </div>
-
-          {(status === 'analysing' || status === 'loading') && (
-            <div className="progress-panel" aria-live="polite">
-              <div>
-                <span>
-                  {status === 'loading' ? 'Loading the 7 MB engine' : `Analysing ${progress.move}`}
-                </span>
-                <span>
-                  {progress.completed}/{progress.total} positions
-                </span>
-              </div>
-              <progress value={totalProgress} max="100" />
-              <small>
-                {progress.nodes.toLocaleString()} / approximately{' '}
-                {(settings.nodes * 2).toLocaleString()} search nodes in this position
-              </small>
-            </div>
-          )}
-
-          {errorMessage && (
-            <p className="error-box" role="alert">
-              {errorMessage}
-            </p>
-          )}
         </div>
-      </section>
-
-      <section className="results" aria-labelledby="results-heading">
-        <div className="results-header">
-          <div>
-            <p className="step">02 / MOVE REVIEW</p>
-            <h2 id="results-heading">See what changed when you moved.</h2>
-          </div>
-          {run && (
-            <button className="secondary-button" onClick={() => downloadAnalysis(run)}>
-              Download evidence
-            </button>
-          )}
-        </div>
-
-        {results.length === 0 ? (
-          <p className="empty-state">
-            No engine evidence yet. Analyse the sample game above to start.
-          </p>
-        ) : (
-          <>
-            <div className="review-summary" aria-label="Analysis summary">
-              <article>
-                <span>Key moments</span>
-                <strong>{keyReviews.length}</strong>
-                <small>Inaccuracies, mistakes and blunders</small>
-              </article>
-              <article>
-                <span>Average loss</span>
-                <strong>{(averageLoss / 100).toFixed(2)}</strong>
-                <small>Pawns lost per move</small>
-              </article>
-              <article>
-                <span>Biggest miss</span>
-                <strong>{largestLoss?.result.san ?? '—'}</strong>
-                <small>
-                  {largestLoss ? `${formatLoss(largestLoss.assessment)} pawns` : 'No result yet'}
-                </small>
-              </article>
-            </div>
-
-            <div className="review-toolbar">
-              <div className="segmented-control" aria-label="Move filter">
-                <button
-                  aria-pressed={reviewFilter === 'all'}
-                  onClick={() => changeReviewFilter('all')}
-                >
-                  All moves <span>{reviewedResults.length}</span>
-                </button>
-                <button
-                  aria-pressed={reviewFilter === 'key'}
-                  onClick={() => changeReviewFilter('key')}
-                  disabled={keyReviews.length === 0}
-                >
-                  Key moments <span>{keyReviews.length}</span>
-                </button>
-              </div>
-              <span>{visibleReviews.length} moves shown</span>
-            </div>
-
-            <div className="review-layout">
-              {selectedResult && (
-                <Chessboard
-                  result={selectedResult}
-                  assessment={selectedReview!.assessment}
-                  canGoPrevious={selectedIndex > 0}
-                  canGoNext={selectedIndex < visibleReviews.length - 1}
-                  onPrevious={() =>
-                    setSelectedPly(visibleReviews[selectedIndex - 1]?.result.ply ?? selectedPly)
-                  }
-                  onNext={() =>
-                    setSelectedPly(visibleReviews[selectedIndex + 1]?.result.ply ?? selectedPly)
-                  }
-                />
-              )}
-              <div className="result-list" aria-label="Analysed moves">
-                {visibleReviews.map(({ result, assessment }) => {
-                  return (
-                    <button
-                      className={`result-row ${selectedResult?.ply === result.ply ? 'result-selected' : ''}`}
-                      key={result.ply}
-                      onClick={() => setSelectedPly(result.ply)}
-                    >
-                      <div className="move-cell">
-                        <span>{moveNumber(result.ply)}</span>
-                        <strong>{result.san}</strong>
-                      </div>
-                      <div>
-                        <small>Assessment</small>
-                        <strong className={`move-label label-${assessment.label.toLowerCase()}`}>
-                          {assessment.label}
-                        </strong>
-                      </div>
-                      <div>
-                        <small>Loss</small>
-                        <strong className="evaluation">{formatLoss(assessment)}</strong>
-                      </div>
-                      <div>
-                        <small>Better move</small>
-                        <code>{moveToSan(result.fen, result.bestMoveUci)}</code>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </>
-        )}
-
-        {run && (
-          <div className="receipt">
-            <strong>Analysis receipt</strong>
-            <span>{engineName}</span>
-            <span>{run.provenance.nodesPerPosition.toLocaleString()} nodes per position</span>
-            <span>MultiPV {run.provenance.multiPv}</span>
-            <span>Saved locally in this browser</span>
-          </div>
-        )}
-      </section>
-
-      <section className="next-layer">
-        <p className="step">WHAT THIS DOES NOT CLAIM YET</p>
-        <h2>Calculation is working. Coaching comes next.</h2>
-        <p>
-          These labels describe immediate engine loss using transparent thresholds. They do not yet
-          explain the chess motif, compare the move with peers, or prove a recurring weakness.
+        <p className="muted">
+          {games.length} saved games · {(libraryBytes / 1024).toFixed(1)} KB of review data · saved
+          on this device only
         </p>
+        {confirmDelete && (
+          <div className="delete-confirm" role="group" aria-label="Confirm deletion">
+            <p>
+              {confirmDelete === 'all'
+                ? 'Delete all saved games and practice attempts from this browser?'
+                : 'Delete this game and its practice attempts?'}
+            </p>
+            <button className="secondary-button" onClick={() => setConfirmDelete(null)}>
+              Keep games
+            </button>
+            <button
+              className="danger-button"
+              disabled={busy}
+              onClick={() => void deleteConfirmed(confirmDelete)}
+            >
+              Confirm delete
+            </button>
+          </div>
+        )}
+        <div className="library-grid">
+          {games.map((game) => (
+            <article
+              className={`library-card ${game.id === active?.id ? 'library-active' : ''}`}
+              key={game.id}
+            >
+              <span className="eyebrow">{game.analysis.game.headers.Event ?? 'Imported game'}</span>
+              <h3>
+                {game.analysis.game.headers.White ?? 'White'} <span>vs</span>{' '}
+                {game.analysis.game.headers.Black ?? 'Black'}
+              </h3>
+              <p>
+                {game.analysis.game.plies} half-moves · {game.analysis.game.headers.Result ?? '*'} ·{' '}
+                {new Date(game.updatedAt).toLocaleDateString()}
+              </p>
+              <div className="actions">
+                <button
+                  className="secondary-button"
+                  disabled={busy}
+                  onClick={() => {
+                    focusReview.current = true;
+                    openGame(game);
+                  }}
+                  aria-label={`Open ${game.analysis.game.headers.White ?? 'White'} vs ${game.analysis.game.headers.Black ?? 'Black'}`}
+                >
+                  Open review
+                </button>
+                <button
+                  className="text-button"
+                  disabled={busy}
+                  onClick={() => setConfirmDelete(game.id)}
+                  aria-label={`Delete ${game.analysis.game.headers.White ?? 'White'} vs ${game.analysis.game.headers.Black ?? 'Black'}`}
+                >
+                  Delete
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+        {!games.length && (
+          <p className="empty-state">
+            Completed reviews appear here automatically. Export a backup before clearing browser
+            data.
+          </p>
+        )}
       </section>
-
+      <Practice games={games} onAttempt={recordAttempt} />
+      <section className="next-layer" id="privacy">
+        <h2>Study locally. Keep control.</h2>
+        <p>
+          Games, reviews and practice attempts stay in this browser's IndexedDB. No accounts,
+          analytics or PGN uploads. The hosting provider may use security cookies and bot-protection
+          scripts, and receives ordinary page and asset requests, including IP and request metadata.
+          Browser data is not encrypted against someone with access to your device.
+        </p>
+        <details>
+          <summary>Privacy, accuracy and fair play</summary>
+          <p>
+            Use completed games only. Quick engine searches can change at deeper budgets; labels are
+            transparent estimates of immediate move loss, not validated coaching diagnoses. Practice
+            compares against a recorded engine choice. Peer comparison, recurring motif diagnosis
+            and measured long-term improvement remain research work. Mobile support is experimental;
+            start with Quick analysis.
+          </p>
+          <p>
+            Deleting a game removes its review and practice attempts. Clear library deletes all
+            local records. Downloaded backups remain wherever you saved them. External GitHub links
+            leave this site.
+          </p>
+        </details>
+      </section>
       <footer>
-        <span>Post-game study only · {engineName}</span>
-        <a href="https://github.com/Shreyastacky/prophylens" rel="noreferrer">
-          AGPL-3.0-or-later
-        </a>
+        <span>Post-game study only · ProphyLens 0.1.0 alpha · {engineName}</span>
+        <div className="footer-links">
+          <a href="#privacy">Privacy</a>
+          <a href="https://github.com/Shreyastacky/prophylens/issues/new/choose">Feedback</a>
+          <a href="https://github.com/Shreyastacky/prophylens">Source · AGPL-3.0-or-later</a>
+          <a href="/engine/COPYING.txt">Stockfish licence</a>
+          <a href="/THIRD_PARTY_NOTICES.txt">Asset licences</a>
+        </div>
       </footer>
     </main>
   );

@@ -13,17 +13,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
       - run: npm ci
       - run: npm run check
-      - name: Install Chromium for browser tests
-        run: npx playwright install --with-deps chromium
+      - name: Install browsers for production tests
+        run: npx playwright install --with-deps chromium firefox webkit
       - name: Run browser journey tests
         run: npm run test:e2e
+        env:
+          BROWSERS: chromium,firefox,webkit
       - name: Upload browser test evidence
         if: always()
         uses: actions/upload-artifact@v4

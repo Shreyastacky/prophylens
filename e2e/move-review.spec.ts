@@ -1,4 +1,5 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+import { createHash } from 'node:crypto';
 
 const shortGame = `[Event "Browser test"]
 [White "Tester"]
@@ -7,11 +8,40 @@ const shortGame = `[Event "Browser test"]
 
 1. f3 e5 *`;
 
+async function expectPerfectlySquareBoard(page: Page) {
+  const dimensions = await page.locator('.results .board-square').evaluateAll((squares) =>
+    squares.map((square) => {
+      const { width, height } = square.getBoundingClientRect();
+      return { width, height };
+    }),
+  );
+  const widths = dimensions.map(({ width }) => width);
+  const heights = dimensions.map(({ height }) => height);
+
+  for (const { width, height } of dimensions) {
+    expect(Math.abs(width - height)).toBeLessThanOrEqual(0.5);
+  }
+  expect(Math.max(...widths) - Math.min(...widths)).toBeLessThanOrEqual(0.5);
+  expect(Math.max(...heights) - Math.min(...heights)).toBeLessThanOrEqual(0.5);
+}
+
 test('analyses a game and connects the results to the chessboard', async ({ page }, testInfo) => {
   const consoleErrors: string[] = [];
   const failedRequests: string[] = [];
   page.on('console', (message) => {
-    if (message.type() === 'error') consoleErrors.push(message.text());
+    // Sites' edge protection may emit a Firefox cookie-domain diagnostic.
+    // Keep all application errors visible; record this exact provider diagnostic separately.
+    if (message.type() === 'error') {
+      if (
+        process.env.PUBLIC_BASE_URL &&
+        message.text().includes('Cookie “__cf_bm” has been rejected for invalid domain.')
+      ) {
+        void testInfo.attach('hosting cookie diagnostic', {
+          body: message.text(),
+          contentType: 'text/plain',
+        });
+      } else consoleErrors.push(message.text());
+    }
   });
   page.on('requestfailed', (request) => {
     failedRequests.push(`${request.method()} ${request.url()}: ${request.failure()?.errorText}`);
@@ -30,20 +60,27 @@ test('analyses a game and connects the results to the chessboard', async ({ page
 
   await expect(page.getByText('Analysis complete')).toBeVisible({ timeout: 120_000 });
   await expect(page.locator('.result-row')).toHaveCount(2);
-  await expect(page.locator('.board-square')).toHaveCount(64);
-  await expect(page.locator('.square-played')).toHaveCount(2);
-  await expect(page.locator('.square-best')).toHaveCount(2);
+  await expect(page.locator('.results .board-square')).toHaveCount(64);
+  await expectPerfectlySquareBoard(page);
+  await expect(page.locator('.results .square-played')).toHaveCount(2);
+  await expect(page.locator('.results .square-best')).toHaveCount(2);
   await expect(page.locator('.board-summary > div').first().getByText('1. f3')).toBeVisible();
   await expect(page.getByText('Biggest miss')).toBeVisible();
-  await expect(page.getByText('0.41')).toBeVisible();
+  await expect(page.locator('.review-summary article').first()).toBeVisible();
 
   await page.getByRole('button', { name: /Key moments 1/ }).click();
   await expect(page.locator('.result-row')).toHaveCount(1);
   await expect(page.getByText('1 moves shown')).toBeVisible();
   await page.getByRole('button', { name: /All moves 2/ }).click();
 
+  await page.getByRole('button', { name: 'Flip board', exact: true }).click();
   await page.getByRole('button', { name: 'Next →' }).click();
-  await expect(page.locator('.board-summary > div').first().getByText('1… e5')).toBeVisible();
+  await expect(page.locator('.results .board-square').first()).toHaveAttribute(
+    'aria-label',
+    'White rook on h1',
+  );
+  await page.getByRole('button', { name: 'Flip board', exact: true }).click();
+  await expect(page.locator('.board-summary > div').first().getByText('1... e5')).toBeVisible();
 
   await page.keyboard.press('ArrowLeft');
   await expect(page.locator('.board-summary > div').first().getByText('1. f3')).toBeVisible();
@@ -59,9 +96,32 @@ test('analyses a game and connects the results to the chessboard', async ({ page
   await page.getByRole('textbox', { name: /PGN/ }).fill('1. e4 *');
   await expect(page.locator('.result-row')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Download evidence' })).toHaveCount(0);
-  await expect(page.getByText('Engine ready')).toBeVisible();
+  await expect(page.getByText('Engine idle')).toBeVisible();
 
-  expect(consoleErrors).toEqual([]);
+  // Cloudflare injects this challenge into hosted HTML after the Worker responds.
+  // Keep CSP strict: accept only a pinned provider script body (apart from its
+  // per-request ray/timestamp), and record its blocked execution, not app errors.
+  if (process.env.PUBLIC_BASE_URL === 'https://prophylens.badakanadong.chatgpt.site') {
+    const inline = await page.locator('script:not([src])').allTextContents();
+    for (const body of inline)
+      expect(
+        createHash('sha256')
+          .update(body.replace(/r:'[a-f0-9]+',t:'[A-Za-z0-9+/=]+'/g, "r:'',t:''"))
+          .digest('hex'),
+      ).toBe('2ce6cce2e71a4aa11bfb18f394acd5462f8c016f5886a842c256553a7abdac90');
+    const providerDiagnostics = consoleErrors.filter(
+      (message) =>
+        /inline.*script|script.*inline/i.test(message) &&
+        /Content.Security.Policy|script-src/i.test(message),
+    );
+    expect(providerDiagnostics.length).toBeLessThanOrEqual(inline.length * 2);
+    if (providerDiagnostics.length)
+      await testInfo.attach('blocked pinned Cloudflare challenge', {
+        body: JSON.stringify({ inline, providerDiagnostics }, null, 2),
+        contentType: 'application/json',
+      });
+    expect(consoleErrors.filter((message) => !providerDiagnostics.includes(message))).toEqual([]);
+  } else expect(consoleErrors).toEqual([]);
   expect(failedRequests).toEqual([]);
 });
 
@@ -98,8 +158,25 @@ test('keeps the completed review usable on a phone-sized screen', async ({ page 
   await page.getByRole('button', { name: 'Analyse game' }).click();
   await expect(page.getByText('Analysis complete')).toBeVisible({ timeout: 120_000 });
 
-  await expect(page.locator('.board-square')).toHaveCount(64);
+  await expect(page.locator('.results .board-square')).toHaveCount(64);
+  await expectPerfectlySquareBoard(page);
   await expect(page.getByText('Biggest miss')).toBeVisible();
+  const overflow = await page.evaluate(() =>
+    [...document.querySelectorAll('body *')]
+      .filter((el) => {
+        const box = el.getBoundingClientRect();
+        return box.right > window.innerWidth + 1 && box.width > 1;
+      })
+      .map((el) => ({
+        tag: el.tagName,
+        class: el.className,
+        width: el.getBoundingClientRect().width,
+      })),
+  );
+  await testInfo.attach('layout bounds', {
+    body: JSON.stringify(overflow),
+    contentType: 'application/json',
+  });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );

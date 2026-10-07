@@ -20,7 +20,7 @@ describe('Chessboard', () => {
     const html = renderToStaticMarkup(
       <Chessboard
         result={result}
-        assessment={{ label: 'Good', centipawnLoss: 10 }}
+        assessment={{ label: 'Good', centipawnLoss: 10, confidence: 'medium' }}
         canGoPrevious={false}
         canGoNext={true}
         onPrevious={() => undefined}

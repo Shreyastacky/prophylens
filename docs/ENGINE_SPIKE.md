@@ -1,5 +1,7 @@
 # Engine spike status
 
+> Historical notes. Current public-alpha behaviour and verification are recorded in [RELEASE.md](RELEASE.md) and [NEXT_STEPS.md](NEXT_STEPS.md).
+
 **Status:** implementation complete enough for browser benchmarking; go/no-go decision not yet made.
 
 ## What exists

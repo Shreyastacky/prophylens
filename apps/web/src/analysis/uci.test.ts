@@ -14,6 +14,7 @@ describe('UCI parsing', () => {
       selectiveDepth: 21,
       nodes: 12345,
       scoreCp: -37,
+      scoreBound: 'exact',
       wdl: { win: 120, draw: 500, loss: 380 },
       movesUci: ['e7e5', 'g1f3'],
     });

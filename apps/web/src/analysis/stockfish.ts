@@ -1,8 +1,9 @@
 import type { AnalysisSettings, EngineLine, GamePosition, PositionAnalysis } from './types';
-import { ENGINE_ASSET } from './types';
 import { parseBestMove, parseInfoLine } from './uci';
+import { legalVariation } from './variation';
+import { verifiedEngineUrls } from './engine-integrity';
 
-const INITIALIZATION_TIMEOUT_MS = 30_000;
+const INITIALIZATION_TIMEOUT_MS = 90_000;
 const POSITION_TIMEOUT_MS = 120_000;
 
 function abortError(): DOMException {
@@ -15,11 +16,14 @@ export class StockfishClient {
   private failureListeners = new Set<(error: Error) => void>();
   private initialization: Promise<string> | null = null;
   private engineName = 'Stockfish 18';
+  private verified: { script: string; wasm: string } | null = null;
+  private verificationAbort: AbortController | null = null;
 
   private createWorker(): Worker {
     if (this.worker) return this.worker;
 
-    const worker = new Worker(ENGINE_ASSET.workerUrl);
+    if (!this.verified) throw new Error('Engine bytes have not been verified.');
+    const worker = new Worker(`${this.verified.script}#${encodeURIComponent(this.verified.wasm)}`);
     worker.addEventListener('message', (event: MessageEvent<unknown>) => {
       const text = String(event.data);
       for (const line of text.split(/\r?\n/).filter(Boolean)) {
@@ -91,6 +95,10 @@ export class StockfishClient {
     if (this.initialization) return this.initialization;
 
     this.initialization = (async () => {
+      const abort = new AbortController();
+      this.verificationAbort = abort;
+      this.verified = await verifiedEngineUrls(abort.signal);
+      abort.signal.throwIfAborted();
       await this.commandUntil('uci', (line) => line === 'uciok', {
         timeoutMs: INITIALIZATION_TIMEOUT_MS,
         onLine: (line) => {
@@ -128,8 +136,10 @@ export class StockfishClient {
       lines: EngineLine[];
     }> => {
       const lines = new Map<number, EngineLine>();
+      const exactLines = new Map<string, EngineLine>();
       let bestMove = '';
       this.createWorker().postMessage(`setoption name MultiPV value ${multiPv}`);
+      this.createWorker().postMessage('setoption name Clear Hash');
       this.createWorker().postMessage(position.positionCommand);
       const command = `go nodes ${settings.nodes}${searchMove ? ` searchmoves ${searchMove}` : ''}`;
 
@@ -147,13 +157,29 @@ export class StockfishClient {
             const parsed = parseInfoLine(line);
             if (!parsed) return;
             const previous = lines.get(parsed.rank);
-            if (!previous || parsed.depth >= previous.depth) lines.set(parsed.rank, parsed);
+            if (
+              parsed.scoreBound === 'exact' &&
+              parsed.movesUci.length &&
+              legalVariation(position.fen, parsed.movesUci)
+            )
+              exactLines.set(parsed.movesUci[0]!, parsed);
+            if (
+              parsed.movesUci.length &&
+              legalVariation(position.fen, parsed.movesUci) &&
+              (!previous || parsed.depth >= previous.depth)
+            )
+              lines.set(parsed.rank, parsed);
             onNodes((searchMove ? settings.nodes : 0) + parsed.nodes);
           },
         },
       );
 
-      return { bestMove, lines: [...lines.values()].sort((a, b) => a.rank - b.rank) };
+      const finalLines = [...lines.values()]
+        .sort((a, b) => a.rank - b.rank)
+        .map((line) => exactLines.get(line.movesUci[0]!) ?? line);
+      const best = exactLines.get(bestMove);
+      if (best) finalLines[0] = { ...best, rank: 1 };
+      return { bestMove, lines: finalLines };
     };
 
     const bestSearch = await search(settings.multiPv);
@@ -179,11 +205,18 @@ export class StockfishClient {
   }
 
   terminate(): void {
+    this.verificationAbort?.abort();
+    this.verificationAbort = null;
     if (this.worker) {
       this.worker.postMessage('quit');
       this.worker.terminate();
     }
     this.worker = null;
+    if (this.verified) {
+      URL.revokeObjectURL(this.verified.script);
+      URL.revokeObjectURL(this.verified.wasm);
+      this.verified = null;
+    }
     this.initialization = null;
     this.listeners.clear();
     const error = abortError();
