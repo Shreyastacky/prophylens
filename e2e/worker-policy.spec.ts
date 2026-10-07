@@ -8,9 +8,9 @@ test('fresh and revalidated workers retain the origin isolation policy', async (
     assets: Record<string, string>;
   };
   const workers = Object.keys(manifest.assets).filter((path) =>
-    /pgn\.worker-.*\.js$|engine\/stockfish-.*\.js$/.test(path),
+    /(?:pgn|storage)\.worker-.*\.js$|engine\/stockfish-.*\.js$/.test(path),
   );
-  expect(workers).toHaveLength(2);
+  expect(workers).toHaveLength(3);
   for (const worker of workers) {
     const fresh = await request.get('/' + worker);
     expect(fresh.status()).toBe(200);

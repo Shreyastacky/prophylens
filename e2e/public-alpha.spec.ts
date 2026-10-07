@@ -61,10 +61,27 @@ test('failed persistence keeps the completed review downloadable', async ({ page
   await expect(page.getByRole('alert')).toBeVisible();
 });
 test('cancel, restart and repeated analysis recover without duplicate games', async ({ page }) => {
+  await page.addInitScript(() => {
+    const original = Worker.prototype.postMessage;
+    Worker.prototype.postMessage = function (message: any, ...args: any[]) {
+      // Hold the first requested search so a fast engine cannot finish while
+      // the browser waits for the moving Cancel button to become stable.
+      if (
+        typeof message === 'string' &&
+        message.startsWith('go ') &&
+        !(window as any).firstSearchHeld
+      ) {
+        (window as any).firstSearchHeld = true;
+        return;
+      }
+      return (original as any).call(this, message, ...args);
+    };
+  });
   await page.goto('/');
   await page.getByLabel('Nodes per position').selectOption('100000');
   await page.getByRole('button', { name: 'Analyse game' }).click();
   await expect(page.getByText('Analysing locally')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => Boolean((window as any).firstSearchHeld))).toBe(true);
   const start = Date.now();
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(page.getByText('Analysis cancelled')).toBeVisible({ timeout: 2000 });

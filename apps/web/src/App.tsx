@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { parsePgnAsync } from './analysis/parseAsync';
 import { MAX_PGN_BYTES, splitPgnGames } from './analysis/pgn';
 import { StockfishClient } from './analysis/stockfish';
@@ -8,16 +8,19 @@ import {
   downloadAnalysis,
   downloadLibrary,
   downloadPgn,
-  importGames,
   listGames,
   makeLibraryGame,
-  MAX_LIBRARY_FILE_BYTES,
   migrateLegacy,
-  readLibraryFile,
+  getGame,
+  appendAttempt,
+  updatePlayer,
+  saveAnalysis,
+  StorageConflict,
+  subscribeLibrary,
   removeGame,
-  saveGame,
   sha256,
 } from './analysis/storage';
+import { importLibraryAsync } from './analysis/storageAsync';
 import {
   ENGINE_ASSET,
   type AnalysisRun,
@@ -66,8 +69,11 @@ export function App() {
     [fileError, setFileError] = useState<string | null>(null),
     [notice, setNotice] = useState<string | null>(null),
     [fileName, setFileName] = useState<string | null>(null);
-  const [queue, setQueue] = useState<string[]>([]),
-    [progress, setProgress] = useState({
+  const batchRef = useRef<{ sources: string[]; cursor: number } | null>(null);
+  const [remaining, setRemaining] = useState(0);
+  const [unsaved, setUnsaved] = useState<LibraryGame[]>([]);
+  const [damaged, setDamaged] = useState(0);
+  const [progress, setProgress] = useState({
       completed: 0,
       total: 0,
       nodes: 0,
@@ -81,8 +87,16 @@ export function App() {
     abortRef = useRef<AbortController | null>(null),
     operation = useRef(0);
   const focusReview = useRef(false);
-  const [importing, setImporting] = useState<'pgn' | 'backup' | 'delete' | null>(null);
+  const [importing, setImporting] = useState<'pgn' | 'backup' | 'delete' | 'player' | null>(null);
   const busy = importing !== null || status === 'loading' || status === 'analysing';
+  const libraryRead = useRef(0);
+  const view = useRef({ active, busy, player });
+  view.current = { active, busy, player };
+  async function readLatestLibrary() {
+    const revision = ++libraryRead.current;
+    const saved = await listGames();
+    return revision === libraryRead.current ? saved : null;
+  }
   const parsedMatches = parsed !== null && parsedSource === pgn;
   const showReview = results.length > 0 && !busy;
   useEffect(() => {
@@ -102,7 +116,8 @@ export function App() {
     setRun(game.analysis);
     setActive(game);
     setPlayer(game.player);
-    setQueue([]);
+    batchRef.current = null;
+    setRemaining(0);
     setFileName(null);
     setStatus('complete');
     setError(null);
@@ -151,9 +166,10 @@ export function App() {
           'An old receipt could not be migrated. Your original browser record was preserved.';
       }
       try {
-        const saved = await listGames();
-        if (mounted) {
+        const saved = await readLatestLibrary();
+        if (mounted && saved) {
           setGames(saved);
+          setDamaged(corruptRecordCount);
           if (saved[0]) openGame(saved[0]);
           if (migrationWarning) setWarning(migrationWarning);
           else if (corruptRecordCount)
@@ -174,6 +190,39 @@ export function App() {
       mounted = false;
     };
   }, []);
+  useEffect(() => {
+    let mounted = true;
+    const refresh = async () => {
+      try {
+        const saved = await readLatestLibrary();
+        if (!mounted || !saved) return;
+        setGames(saved);
+        setDamaged(corruptRecordCount);
+        const currentView = view.current;
+        if (currentView.active && !currentView.busy) {
+          const current = saved.find((g) => g.id === currentView.active!.id);
+          setActive(current ?? null);
+          setPlayer(current?.player ?? currentView.player);
+          setRun(current?.analysis ?? null);
+          setResults(current?.analysis.positions ?? []);
+        }
+      } catch (e) {
+        if (mounted) setWarning(e instanceof Error ? e.message : 'Could not refresh library.');
+      }
+    };
+    const unsubscribe = subscribeLibrary(() => {
+      void refresh();
+    });
+    const onFocus = () => {
+      void refresh();
+    };
+    window.addEventListener('focus', onFocus);
+    return () => {
+      mounted = false;
+      unsubscribe();
+      window.removeEventListener('focus', onFocus);
+    };
+  }, []);
   useEffect(
     () => () => {
       operation.current++;
@@ -191,7 +240,8 @@ export function App() {
     }
     setPgn(next);
     setFileName(name);
-    setQueue([]);
+    batchRef.current = null;
+    setRemaining(0);
     setResults([]);
     setRun(null);
     setActive(null);
@@ -223,7 +273,8 @@ export function App() {
       for (const part of parts) await parsePgnAsync(part, abort.signal);
       if (operation.current !== token || abort.signal.aborted) return;
       replacePgn(parts[0]!, file.name);
-      setQueue(parts.slice(1));
+      batchRef.current = { sources: parts, cursor: 0 };
+      setRemaining(parts.length);
       if (parts.length > 1)
         setNotice(`${parts.length} games ready. Analyse game will review and save each in order.`);
     } catch (e) {
@@ -275,7 +326,9 @@ export function App() {
     const token = ++operation.current,
       abort = new AbortController();
     abortRef.current = abort;
-    const batch = [pgn, ...queue];
+    const batchState = batchRef.current ?? { sources: [pgn], cursor: 0 };
+    batchRef.current = batchState;
+    const batch = batchState.sources;
     setError(null);
     setWarning(null);
     setRun(null);
@@ -283,10 +336,21 @@ export function App() {
     setStatus('loading');
     setConfirmDelete(null);
     try {
-      for (let index = 0; index < batch.length; index++) {
+      for (let index = batchState.cursor; index < batch.length; index++) {
         if (abort.signal.aborted) throw new DOMException('Cancelled', 'AbortError');
         const source = batch[index]!,
-          game = index === 0 ? parsed : await parsePgnAsync(source, abort.signal);
+          game = await parsePgnAsync(source, abort.signal);
+        const identity = await sha256(
+          game.positions[0]!.fen + '|' + game.positions.map((p) => p.moveUci).join(' '),
+        );
+        const expected = await getGame(identity).catch((e) => {
+          setWarning(
+            e instanceof Error
+              ? e.message
+              : 'Storage is unavailable. Download your completed review.',
+          );
+          return undefined;
+        });
         clientRef.current?.terminate();
         const client = new StockfishClient();
         clientRef.current = client;
@@ -345,28 +409,45 @@ export function App() {
         if (operation.current !== token) return;
         // Completion is independent of storage: export remains available if saving fails.
         setRun(finished);
-        const made = await makeLibraryGame(finished, player, active ?? undefined);
-        const record = {
-          ...made,
-          attempts: games.find((g) => g.id === made.id)?.attempts ?? made.attempts,
-        };
+        const record = await makeLibraryGame(finished, player, expected);
+        if (operation.current !== token || abort.signal.aborted) return;
         setActive(record);
         try {
-          await saveGame(record);
-          const saved = await listGames();
-          if (operation.current === token) setGames(saved);
+          const committed = await saveAnalysis(record, expected?.analysis);
+          // Advance only after completing a review, so cancelling the next
+          // game resumes at that game and never repeats completed reviews.
+          batchState.cursor = index + 1;
+          setRemaining(batch.length - batchState.cursor);
+          const saved = await readLatestLibrary();
+          if (operation.current === token && saved) {
+            setGames(saved);
+            const latest = saved.find((g) => g.id === committed.id);
+            setActive(latest ?? null);
+            setPlayer(latest?.player ?? committed.player);
+          }
+          if (operation.current !== token || abort.signal.aborted) return;
         } catch (e) {
-          if (operation.current === token)
+          if (operation.current === token) {
+            setUnsaved((current) => [...current, record]);
+            batchState.cursor = index + 1;
+            setRemaining(batch.length - batchState.cursor);
+            setStatus('complete');
+            setNotice(
+              'Batch paused. Download the unsaved review before resuming the remaining games.',
+            );
             setWarning(
               e instanceof Error
                 ? e.message
                 : 'Could not save. Download your review before leaving.',
             );
+          }
+          return;
         }
       }
       if (operation.current === token) {
         setStatus('complete');
-        setQueue([]);
+        batchRef.current = null;
+        setRemaining(0);
         setNotice(
           batch.length > 1
             ? `Reviewed ${batch.length} games. Check the library for saved reviews.`
@@ -388,32 +469,53 @@ export function App() {
       if (operation.current === token) abortRef.current = null;
     }
   }
-  async function persist(record: LibraryGame) {
-    setActive(record);
-    setGames((current) => current.map((g) => (g.id === record.id ? record : g)));
+  async function changePlayer(side: PlayerSide) {
+    if (busy) return;
+    setPlayer(side);
+    if (!active) return;
+    setImporting('player');
     try {
-      await saveGame(record);
+      await updatePlayer(active.id, side);
+      const saved = await readLatestLibrary();
+      if (!saved || view.current.active?.id !== active.id) return;
+      setGames(saved);
+      const current = saved.find((g) => g.id === active.id);
+      setActive(current ?? null);
+      setPlayer(current?.player ?? side);
+      setRun(current?.analysis ?? null);
+      setResults(current?.analysis.positions ?? []);
     } catch (e) {
       setWarning(e instanceof Error ? e.message : 'Could not save changes. Export a backup.');
+      if (!(e instanceof StorageConflict))
+        setUnsaved((current) => [
+          ...current,
+          { ...active, player: side, updatedAt: new Date().toISOString() },
+        ]);
+    } finally {
+      setImporting(null);
     }
   }
-  function changePlayer(side: PlayerSide) {
-    setPlayer(side);
-    if (active) void persist({ ...active, player: side, updatedAt: new Date().toISOString() });
-  }
   async function recordAttempt(game: LibraryGame, attempt: PracticeAttempt) {
-    const next = {
-      ...game,
-      attempts: [...game.attempts, attempt],
-      updatedAt: new Date().toISOString(),
-    };
-    setGames((current) => current.map((g) => (g.id === game.id ? next : g)));
-    if (active?.id === game.id) setActive(next);
+    if (view.current.busy)
+      throw new StorageConflict(
+        'Practice is paused while the library is changing. Try again afterwards.',
+      );
     try {
-      await saveGame(next);
-    } catch {
+      await appendAttempt(game, attempt);
+      const saved = await readLatestLibrary();
+      if (!saved) return;
+      setGames(saved);
+      if (active?.id === game.id) setActive(saved.find((g) => g.id === game.id) ?? null);
+    } catch (e) {
+      if (e instanceof StorageConflict) throw e;
+      const next = {
+        ...game,
+        attempts: [...game.attempts, attempt],
+        updatedAt: new Date().toISOString(),
+      };
+      setUnsaved((current) => [...current, next]);
       setWarning(
-        'Practice was recorded for this session, but could not be saved. Export a library backup before leaving.',
+        'Practice could not be saved. Download unsaved reviews to keep this attempt before leaving.',
       );
     }
   }
@@ -421,18 +523,19 @@ export function App() {
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = '';
     if (!file) return;
-    if (file.size > MAX_LIBRARY_FILE_BYTES) {
-      setWarning('The backup exceeds the 20 MB limit.');
-      return;
-    }
     setImporting('backup');
+    setNotice(null);
     try {
-      const records = await readLibraryFile(await file.text());
-      await importGames(records);
-      const saved = await listGames();
+      const checked = await importLibraryAsync(file);
+      libraryRead.current++;
+      const saved = checked.games;
       setGames(saved);
-      if (records[0]) openGame(saved.find((g) => g.id === records[0]!.id)!);
-      setNotice(`Imported ${records.length} review(s). Duplicate games were combined.`);
+      setDamaged(checked.corrupt);
+      const first = saved.find((g) => g.id === checked.importedIds?.[0]);
+      if (first) openGame(first);
+      setNotice(
+        `Imported ${checked.importedIds?.length ?? 0} review(s). Duplicate games were combined.`,
+      );
     } catch (e) {
       setWarning(e instanceof Error ? e.message : 'Could not import backup.');
     } finally {
@@ -440,14 +543,17 @@ export function App() {
     }
   }
   async function deleteConfirmed(id: string) {
+    libraryRead.current++;
     setImporting('delete');
     try {
       if (id === 'all') {
         await clearLibrary();
         setGames([]);
+        setDamaged(0);
       } else {
         await removeGame(id);
-        setGames(await listGames());
+        const saved = await readLatestLibrary();
+        if (saved) setGames(saved);
       }
       if (id === 'all' || active?.id === id) {
         setActive(null);
@@ -465,7 +571,10 @@ export function App() {
   const progressPercent = progress.total
     ? Math.min(100, (progress.completed / progress.total) * 100)
     : 0;
-  const libraryBytes = new TextEncoder().encode(JSON.stringify(games)).length;
+  const libraryBytes = useMemo(
+    () => new TextEncoder().encode(JSON.stringify(games)).length,
+    [games],
+  );
   return (
     <main>
       <a className="skip-link" href="#import-heading">
@@ -630,7 +739,8 @@ export function App() {
                 onClick={() => void analyse()}
                 disabled={!parsedMatches || validating || busy || !libraryReady}
               >
-                Analyse game <ArrowUpRight size={17} aria-hidden="true" />
+                {remaining > 0 && batchRef.current?.cursor ? 'Resume batch' : 'Analyse game'}{' '}
+                <ArrowUpRight size={17} aria-hidden="true" />
               </button>
               {busy && (importing === null || importing === 'pgn') ? (
                 <button className="secondary-button" onClick={cancel}>
@@ -701,6 +811,22 @@ export function App() {
           {notice}
         </p>
       )}
+      {unsaved.length > 0 && (
+        <section className="storage-warning" aria-label="Unsaved reviews">
+          <p>
+            {unsaved.length} unsaved completed review(s) retained in this session. Download before
+            leaving.
+          </p>
+          <button className="secondary-button" onClick={() => downloadLibrary(unsaved)}>
+            Download unsaved reviews
+          </button>
+          {unsaved.map((game, i) => (
+            <button className="text-button" key={i} onClick={() => downloadAnalysis(game.analysis)}>
+              Download unsaved evidence {i + 1}
+            </button>
+          ))}
+        </section>
+      )}
       <section id="library" className="library-section" aria-labelledby="library-heading">
         <div className="results-header">
           <div>
@@ -727,7 +853,7 @@ export function App() {
             </label>
             <button
               className="text-button"
-              disabled={!games.length || busy}
+              disabled={(!games.length && !damaged) || busy || !libraryReady}
               onClick={() => setConfirmDelete('all')}
             >
               Clear library
@@ -803,7 +929,7 @@ export function App() {
           </p>
         )}
       </section>
-      <Practice games={games} onAttempt={recordAttempt} />
+      <Practice games={games} onAttempt={recordAttempt} disabled={busy} />
       <section className="next-layer" id="privacy">
         <h2>Study locally. Keep control.</h2>
         <p>
@@ -829,7 +955,10 @@ export function App() {
         </details>
       </section>
       <footer>
-        <span>Post-game study only · ProphyLens 0.1.0 alpha · {engineName}</span>
+        <span>
+          Post-game study only · ProphyLens {import.meta.env.VITE_APP_VERSION ?? 'development'} ·{' '}
+          {engineName}
+        </span>
         <div className="footer-links">
           <a href="#privacy">Privacy</a>
           <a href="https://github.com/Shreyastacky/prophylens/issues/new/choose">Feedback</a>

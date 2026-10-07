@@ -2,9 +2,13 @@
 
 Private chess review and practice, built from your own completed games.
 
-**Public alpha:** [Open ProphyLens](https://prophylens.badakanadong.chatgpt.site). Version 0.1.0.
+**Repository version:** 0.1.3-alpha. The footer, release manifest and new receipts derive their version from the root package metadata. The [published alpha](https://prophylens.badakanadong.chatgpt.site) may run an older release; these local changes have not been deployed.
 
 Paste a standard-chess PGN or import a file of up to 100 games (2 MB total, 600 half-moves per game). Stockfish 18 runs locally in a worker. Review either player's moves, filter key moments, replay engine variations, and practise positions from your saved games. The browser library supports refresh recovery, deduplication, deletion, JSON backup/restore, raw PGN export and versioned evidence receipts.
+
+Library backups have no game-count or total-file-size limit; the PGN limits apply to new PGN imports, not library restores. Every record is validated, and invalid backups fail without partial imports or truncation. Very large backups still require available browser memory and disk space. Parsing and chess validation run in a worker. Engine downloads, including response bodies, have a 45-second deadline and can be cancelled or retried.
+
+Cancelled batches resume at the unfinished game. A failed save pauses the batch with the completed review retained under **Unsaved reviews**; download it before leaving, then resume the remaining games. Backup merge preserves unique attempts, uses the newest `updatedAt` for player settings/metadata and the newest analysis `createdAt` for evidence (deterministic ties). Library writes are atomic across tabs, and stale practice/reanalysis cannot recreate a deleted game or overwrite changed analysis.
 
 ## Accuracy and scope
 

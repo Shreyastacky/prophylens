@@ -1,0 +1,149 @@
+{
+  "candidate": {
+    "releaseManifestSha256": "bde78ec42694bdd5aceeaf855d6de4772844ae2d0c32b7e4bb3711c13d22c304",
+    "branch": "codex/audit-reliability",
+    "baseCommit": "3792f9ca3cd9ef33ee87f5584f35f8fadd4107cb",
+    "uncommittedAtValidation": true
+  },
+  "comprehensiveRun": {
+    "stats": {
+      "startTime": "2026-10-06T17:24:38.564Z",
+      "duration": 722385.801,
+      "expected": 119,
+      "skipped": 0,
+      "unexpected": 1,
+      "flaky": 0
+    },
+    "projects": {
+      "chromium": {
+        "passed": 40,
+        "failed": 0
+      },
+      "firefox": {
+        "passed": 40,
+        "failed": 0
+      },
+      "webkit": {
+        "passed": 39,
+        "failed": 1
+      }
+    },
+    "failures": [
+      {
+        "project": "webkit",
+        "file": "public-alpha.spec.ts",
+        "title": "cancel, restart and repeated analysis recover without duplicate games",
+        "errors": [
+          "\u001b[31mTest timeout of 120000ms exceeded.\u001b[39m",
+          "Error: locator.click: Test timeout of 120000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: 'Cancel', exact: true })\u001b[22m\n\u001b[2m    - locator resolved to <button class=\"secondary-button\">Cancel</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m    - element is not stable\u001b[22m\n\u001b[2m  - retrying click action\u001b[22m\n\u001b[2m    - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m  - element was detached from the DOM, retrying\u001b[22m\n\n\n  67 |   await expect(page.getByText('Analysing locally')).toBeVisible();\n  68 |   const start = Date.now();\n> 69 |   await page.getByRole('button', { name: 'Cancel', exact: true }).click();\n     |                                                                   ^\n  70 |   await expect(page.getByText('Analysis cancelled')).toBeVisible({ timeout: 2000 });\n  71 |   expect(Date.now() - start).toBeLessThan(2000);\n  72 |   await page.getByRole('button', { name: 'Restart engine' }).click();\n    at C:\\Users\\Shreyas\\Documents\\ChatGPT\\Chessmuah\\e2e\\public-alpha.spec.ts:69:67"
+        ]
+      }
+    ],
+    "report": "../test-results/final-results.json"
+  },
+  "benchmarks": [
+    {
+      "browser": "chromium",
+      "games": 180,
+      "plies": 21118,
+      "attempts": 43200,
+      "inputBytes": 24471191,
+      "exportedBytes": 24471235,
+      "import": {
+        "samples": 417,
+        "maximumGapMs": 202.4699999988079,
+        "p95GapMs": 31.149999998509884,
+        "rendererHeapBytesAfterStage": 22198320,
+        "elapsedMs": 8624
+      },
+      "restore": {
+        "samples": 42,
+        "maximumGapMs": 213.42000000178814,
+        "p95GapMs": 32.71999999880791,
+        "rendererHeapBytesAfterStage": 51263912,
+        "elapsedMs": 1068
+      },
+      "analysis": {
+        "samples": 64,
+        "maximumGapMs": 158.8699999973178,
+        "p95GapMs": 101.22500000149012,
+        "rendererHeapBytesAfterStage": 54793980,
+        "elapsedMs": 2039
+      },
+      "memoryScope": "Chromium CDP renderer JS heap snapshots after each stage; excludes worker, IndexedDB and engine WASM allocations. Other browsers return null."
+    },
+    {
+      "browser": "firefox",
+      "games": 180,
+      "plies": 21118,
+      "attempts": 43200,
+      "inputBytes": 24471191,
+      "exportedBytes": 24471235,
+      "import": {
+        "samples": 365,
+        "maximumGapMs": 139.1200000000008,
+        "p95GapMs": 20.639999999999418,
+        "rendererHeapBytesAfterStage": null,
+        "elapsedMs": 7626
+      },
+      "restore": {
+        "samples": 51,
+        "maximumGapMs": 186.4399999999987,
+        "p95GapMs": 91.20000000000073,
+        "rendererHeapBytesAfterStage": null,
+        "elapsedMs": 1463
+      },
+      "analysis": {
+        "samples": 97,
+        "maximumGapMs": 180.6800000000003,
+        "p95GapMs": 146.8199999999997,
+        "rendererHeapBytesAfterStage": null,
+        "elapsedMs": 3669
+      },
+      "memoryScope": "Chromium CDP renderer JS heap snapshots after each stage; excludes worker, IndexedDB and engine WASM allocations. Other browsers return null."
+    },
+    {
+      "browser": "webkit",
+      "games": 180,
+      "plies": 21118,
+      "attempts": 43200,
+      "inputBytes": 24471191,
+      "exportedBytes": 24471235,
+      "import": {
+        "samples": 734,
+        "maximumGapMs": 306.6800000000003,
+        "p95GapMs": 35.45999999999913,
+        "rendererHeapBytesAfterStage": null,
+        "elapsedMs": 23553
+      },
+      "restore": {
+        "samples": 50,
+        "maximumGapMs": 259.73999999999796,
+        "p95GapMs": 191.60000000000218,
+        "rendererHeapBytesAfterStage": null,
+        "elapsedMs": 2596
+      },
+      "analysis": {
+        "samples": 146,
+        "maximumGapMs": 234.15999999999622,
+        "p95GapMs": 178.36000000000058,
+        "rendererHeapBytesAfterStage": null,
+        "elapsedMs": 8469
+      },
+      "memoryScope": "Chromium CDP renderer JS heap snapshots after each stage; excludes worker, IndexedDB and engine WASM allocations. Other browsers return null."
+    }
+  ],
+  "cancellationFollowup": {
+    "stats": {
+      "startTime": "2026-10-06T17:37:28.990Z",
+      "duration": 33568.962,
+      "expected": 3,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "report": "../test-results/cancellation-followup/cancellation-results.json",
+    "browsers": ["chromium", "firefox", "webkit"],
+    "reason": "Strengthened the test to hold the first requested search while clicking Cancel. The initial WebKit failure waited for button stability until the fast analysis had completed. No application change was required."
+  }
+}
