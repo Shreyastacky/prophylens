@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { parsePgnAsync } from './analysis/parseAsync';
 import { MAX_PGN_BYTES, splitPgnGames } from './analysis/pgn';
 import { StockfishClient } from './analysis/stockfish';
@@ -50,6 +50,72 @@ const labels: Record<Status, string> = {
   complete: 'Analysis complete',
   error: 'Engine error',
 };
+// Records are immutable once listed, so each one is serialized and measured once
+// rather than re-encoding the whole library whenever one game changes.
+const recordBytes = new WeakMap<LibraryGame, number>();
+function gameBytes(game: LibraryGame): number {
+  let bytes = recordBytes.get(game);
+  if (bytes === undefined) {
+    bytes = new TextEncoder().encode(JSON.stringify(game)).length;
+    recordBytes.set(game, bytes);
+  }
+  return bytes;
+}
+const PracticePanel = memo(Practice);
+// Engine progress re-renders App many times a second; a large library must not
+// re-render (and re-format dates for) every card on each tick.
+const LibraryGrid = memo(function LibraryGrid({
+  games,
+  activeId,
+  busy,
+  onOpen,
+  onDelete,
+}: {
+  games: LibraryGame[];
+  activeId: string | undefined;
+  busy: boolean;
+  onOpen: (game: LibraryGame) => void;
+  onDelete: (id: string) => void;
+}) {
+  return (
+    <div className="library-grid">
+      {games.map((game) => (
+        <article
+          className={`library-card ${game.id === activeId ? 'library-active' : ''}`}
+          key={game.id}
+        >
+          <span className="eyebrow">{game.analysis.game.headers.Event ?? 'Imported game'}</span>
+          <h3>
+            {game.analysis.game.headers.White ?? 'White'} <span>vs</span>{' '}
+            {game.analysis.game.headers.Black ?? 'Black'}
+          </h3>
+          <p>
+            {game.analysis.game.plies} half-moves · {game.analysis.game.headers.Result ?? '*'} ·{' '}
+            {new Date(game.updatedAt).toLocaleDateString()}
+          </p>
+          <div className="actions">
+            <button
+              className="secondary-button"
+              disabled={busy}
+              onClick={() => onOpen(game)}
+              aria-label={`Open ${game.analysis.game.headers.White ?? 'White'} vs ${game.analysis.game.headers.Black ?? 'Black'}`}
+            >
+              Open review
+            </button>
+            <button
+              className="text-button"
+              disabled={busy}
+              onClick={() => onDelete(game.id)}
+              aria-label={`Delete ${game.analysis.game.headers.White ?? 'White'} vs ${game.analysis.game.headers.Black ?? 'Black'}`}
+            >
+              Delete
+            </button>
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+});
 export function App() {
   const [pgn, setPgn] = useState(examplePgn),
     [parsed, setParsed] = useState<ParsedGame | null>(null),
@@ -106,6 +172,12 @@ export function App() {
     heading?.scrollIntoView({ block: 'start', behavior: 'instant' });
     heading?.focus({ preventScroll: true });
   }, [showReview, status]);
+  const openGameRef = useRef(openGame);
+  openGameRef.current = openGame;
+  const openFromLibrary = useCallback((game: LibraryGame) => {
+    focusReview.current = true;
+    openGameRef.current(game);
+  }, []);
   function openGame(game: LibraryGame) {
     operation.current++;
     abortRef.current?.abort();
@@ -495,6 +567,12 @@ export function App() {
       setImporting(null);
     }
   }
+  const recordAttemptRef = useRef(recordAttempt);
+  recordAttemptRef.current = recordAttempt;
+  const recordFromPractice = useCallback(
+    (game: LibraryGame, attempt: PracticeAttempt) => recordAttemptRef.current(game, attempt),
+    [],
+  );
   async function recordAttempt(game: LibraryGame, attempt: PracticeAttempt) {
     if (view.current.busy)
       throw new StorageConflict(
@@ -572,7 +650,8 @@ export function App() {
     ? Math.min(100, (progress.completed / progress.total) * 100)
     : 0;
   const libraryBytes = useMemo(
-    () => new TextEncoder().encode(JSON.stringify(games)).length,
+    // Same total as encoding JSON.stringify(games): brackets, commas and each record.
+    () => games.reduce((total, game) => total + gameBytes(game), 2 + Math.max(0, games.length - 1)),
     [games],
   );
   return (
@@ -883,45 +962,13 @@ export function App() {
             </button>
           </div>
         )}
-        <div className="library-grid">
-          {games.map((game) => (
-            <article
-              className={`library-card ${game.id === active?.id ? 'library-active' : ''}`}
-              key={game.id}
-            >
-              <span className="eyebrow">{game.analysis.game.headers.Event ?? 'Imported game'}</span>
-              <h3>
-                {game.analysis.game.headers.White ?? 'White'} <span>vs</span>{' '}
-                {game.analysis.game.headers.Black ?? 'Black'}
-              </h3>
-              <p>
-                {game.analysis.game.plies} half-moves · {game.analysis.game.headers.Result ?? '*'} ·{' '}
-                {new Date(game.updatedAt).toLocaleDateString()}
-              </p>
-              <div className="actions">
-                <button
-                  className="secondary-button"
-                  disabled={busy}
-                  onClick={() => {
-                    focusReview.current = true;
-                    openGame(game);
-                  }}
-                  aria-label={`Open ${game.analysis.game.headers.White ?? 'White'} vs ${game.analysis.game.headers.Black ?? 'Black'}`}
-                >
-                  Open review
-                </button>
-                <button
-                  className="text-button"
-                  disabled={busy}
-                  onClick={() => setConfirmDelete(game.id)}
-                  aria-label={`Delete ${game.analysis.game.headers.White ?? 'White'} vs ${game.analysis.game.headers.Black ?? 'Black'}`}
-                >
-                  Delete
-                </button>
-              </div>
-            </article>
-          ))}
-        </div>
+        <LibraryGrid
+          games={games}
+          activeId={active?.id}
+          busy={busy}
+          onOpen={openFromLibrary}
+          onDelete={setConfirmDelete}
+        />
         {!games.length && (
           <p className="empty-state">
             Completed reviews appear here automatically. Export a backup before clearing browser
@@ -929,7 +976,7 @@ export function App() {
           </p>
         )}
       </section>
-      <Practice games={games} onAttempt={recordAttempt} disabled={busy} />
+      <PracticePanel games={games} onAttempt={recordFromPractice} disabled={busy} />
       <section className="next-layer" id="privacy">
         <h2>Study locally. Keep control.</h2>
         <p>

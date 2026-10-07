@@ -66,7 +66,13 @@ test('large-library backup round trip and responsiveness during restore and anal
   await reset();
   const started = Date.now();
   await restoreFile(page, inputPath);
-  await expect(page.locator('.library-card')).toHaveCount(games.length, { timeout: 120000 });
+  // Measured waits avoid expect() polling: its failure diagnostics build an aria
+  // snapshot of the whole page on the main thread, which the gap meter records.
+  await page.waitForFunction(
+    (count) => document.querySelectorAll('.library-card').length === count,
+    games.length,
+    { timeout: 120000 },
+  );
   const importMetrics = { ...(await metrics()), elapsedMs: Date.now() - started };
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Export library', exact: true }).click();
@@ -83,7 +89,7 @@ test('large-library backup round trip and responsiveness during restore and anal
   await reset();
   const restoreStart = Date.now();
   await restoreFile(page, exportedPath);
-  await expect(page.getByText(/Imported 180 review/)).toBeVisible({ timeout: 120000 });
+  await page.getByText(/Imported 180 review/).waitFor({ timeout: 120000 });
   await expect(page.getByRole('button', { name: 'Export library', exact: true })).toBeEnabled();
   const restoreMetrics = { ...(await metrics()), elapsedMs: Date.now() - restoreStart };
   expect((await stored(page)).reduce((n, g) => n + g.attempts.length, 0)).toBe(43200);
@@ -92,7 +98,7 @@ test('large-library backup round trip and responsiveness during restore and anal
   await reset();
   const analysisStart = Date.now();
   await page.getByRole('button', { name: 'Analyse game', exact: true }).click();
-  await expect(page.getByText('Analysis complete')).toBeVisible({ timeout: 120000 });
+  await page.getByText('Analysis complete').waitFor({ timeout: 120000 });
   const analysisMetrics = { ...(await metrics()), elapsedMs: Date.now() - analysisStart };
   console.log(
     'Library responsiveness',

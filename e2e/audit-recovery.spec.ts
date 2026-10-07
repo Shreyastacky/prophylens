@@ -8,7 +8,9 @@ test('corrupt-only libraries can be cleared through confirmation', async ({ page
   await page.reload();
   await expect(page.getByText(/1 damaged record/)).toBeVisible();
   await expect(page.locator('.library-card')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Clear library', exact: true }).click({ timeout: 2000 });
+  const clear = page.getByRole('button', { name: 'Clear library', exact: true });
+  await expect(clear).toBeEnabled();
+  await clear.click();
   await page.getByRole('button', { name: 'Confirm delete', exact: true }).click();
   expect(await stored(page)).toEqual([]);
   await page.reload();
