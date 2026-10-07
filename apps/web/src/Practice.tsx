@@ -1,8 +1,11 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { Chess } from 'chess.js';
 import { Board, moveToSan } from './Chessboard';
 import { assessMove, isKeyMove } from './analysis/classification';
 import type { LibraryGame, PracticeAttempt } from './analysis/types';
+import { moveNumber } from './analysis/move-number';
+import { recordedPracticeAssessment, isAcceptedPracticeMove } from './analysis/practice-assessment';
+import { StockfishClient } from './analysis/stockfish';
 export function Practice({
   games,
   onAttempt,
@@ -27,27 +30,71 @@ export function Practice({
     [answer, setAnswer] = useState(''),
     [feedback, setFeedback] = useState(''),
     [revealed, setRevealed] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const pending = useRef<{ abort: AbortController; client?: StockfishClient } | null>(null);
   const drill = drills[Math.min(index, drills.length - 1)];
   const position = drill?.game.analysis.positions.find((p) => p.ply === drill.ply);
   useEffect(() => {
+    pending.current?.abort.abort();
+    pending.current?.client?.terminate();
+    pending.current = null;
+    setChecking(false);
     setFrom('');
     setAnswer('');
     setFeedback('');
     setRevealed(false);
+    return () => {
+      pending.current?.abort.abort();
+      pending.current?.client?.terminate();
+    };
   }, [drill?.game.id, drill?.ply]);
   async function attempt(uci: string) {
-    if (!position || !drill) return;
+    if (!position || !drill || checking) return;
+    setChecking(true);
+    const request = {
+      abort: new AbortController(),
+      client: undefined as StockfishClient | undefined,
+    };
+    pending.current = request;
     try {
       const game = new Chess(position.fen);
       const move = /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(uci)
         ? game.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] })
         : game.move(uci);
       const moveUci = move.from + move.to + (move.promotion ?? '');
-      const correct = moveUci === position.bestMoveUci;
+      let assessment = recordedPracticeAssessment(position, moveUci);
+      let comparison: PracticeAttempt['comparison'];
+      if (!assessment) {
+        const client = new StockfishClient();
+        request.client = client;
+        try {
+          const settings = drill.game.analysis.provenance;
+          const evaluated = await client.analysePosition(
+            { ...position, moveUci, positionCommand: `position fen ${position.fen}` },
+            { nodes: settings.nodesPerPosition, multiPv: settings.multiPv },
+            request.abort.signal,
+            () => {},
+          );
+          assessment = assessMove(evaluated);
+          comparison = {
+            bestMoveUci: evaluated.bestMoveUci,
+            bestLine: evaluated.lines[0]!,
+            playedLine: evaluated.playedLine,
+          };
+        } finally {
+          client.terminate();
+        }
+      }
+      if (request.abort.signal.aborted) return;
+      const correct = isAcceptedPracticeMove(assessment.label);
       setFeedback(
         correct
-          ? 'You found the engine choice.'
-          : 'Legal move, but another move led the recorded search. Try again or reveal it.',
+          ? moveUci === position.bestMoveUci
+            ? 'You found the engine choice.'
+            : 'Good move. This alternative is accepted by the engine comparison.'
+          : assessment.label === 'Uncertain'
+            ? 'The search is inconclusive. Try another move or reveal the recorded choice.'
+            : 'This move loses more than a Good move. Try again or reveal the engine choice.',
       );
       if (correct) setRevealed(true);
       await onAttempt(drill.game, {
@@ -55,8 +102,10 @@ export function Practice({
         moveUci,
         correct,
         attemptedAt: new Date().toISOString(),
+        ...(comparison ? { comparison } : {}),
       });
     } catch (error) {
+      if (request.abort.signal.aborted) return;
       setFeedback(
         error instanceof Error && error.message.includes('Invalid move')
           ? 'That move is not legal in this position. Select the piece and destination, or enter SAN such as Nf3.'
@@ -64,6 +113,11 @@ export function Practice({
             ? error.message
             : 'Unable to record your attempt.',
       );
+    } finally {
+      if (pending.current === request) {
+        pending.current = null;
+        setChecking(false);
+      }
     }
   }
   const attempts = games.flatMap((g) => g.attempts);
@@ -88,7 +142,7 @@ export function Practice({
               playedMove={from}
               bestMove={revealed ? position.bestMoveUci : ''}
               onSquare={(square) => {
-                if (revealed) return;
+                if (revealed || checking) return;
                 if (!from) {
                   setFrom(square);
                   return;
@@ -109,8 +163,7 @@ export function Practice({
             <h3>{position.sideToMove === 'white' ? 'White' : 'Black'} to move</h3>
             <p>
               {drill.game.analysis.game.headers.White ?? 'White'} vs{' '}
-              {drill.game.analysis.game.headers.Black ?? 'Black'} · move{' '}
-              {Math.ceil(position.ply / 2)}
+              {drill.game.analysis.game.headers.Black ?? 'Black'} · move {moveNumber(position.fen)}
             </p>
             <form
               onSubmit={(e) => {
@@ -125,11 +178,11 @@ export function Practice({
                   value={answer}
                   onChange={(e) => setAnswer(e.target.value)}
                   placeholder="Nf3 or g1f3"
-                  disabled={revealed}
+                  disabled={revealed || checking}
                 />
               </label>
-              <button className="primary-button" disabled={revealed || !answer.trim()}>
-                Check move
+              <button className="primary-button" disabled={revealed || checking || !answer.trim()}>
+                {checking ? 'Checking move' : 'Check move'}
               </button>
             </form>
             <p aria-live="polite">{feedback}</p>
@@ -143,11 +196,16 @@ export function Practice({
               </p>
             )}
             <div className="actions">
-              <button className="secondary-button" onClick={() => setRevealed(true)}>
+              <button
+                className="secondary-button"
+                disabled={checking}
+                onClick={() => setRevealed(true)}
+              >
                 Reveal move
               </button>
               <button
                 className="secondary-button"
+                disabled={checking}
                 onClick={() => {
                   setIndex((index + 1) % drills.length);
                   setFrom('');
@@ -161,7 +219,7 @@ export function Practice({
             </div>
             <p className="muted">
               {attempts.length} attempts saved · {attempts.filter((a) => a.correct).length} engine
-              choices found
+              choices or good alternatives found
             </p>
           </div>
         </div>

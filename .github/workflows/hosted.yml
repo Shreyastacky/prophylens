@@ -1,0 +1,33 @@
+name: Hosted release verification
+on:
+  workflow_dispatch:
+    inputs:
+      source_revision:
+        description: Exact tagged sourceRevision expected on the public site
+        required: true
+permissions:
+  contents: read
+jobs:
+  hosted:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium firefox webkit
+      - run: npm run test:e2e
+        env:
+          PUBLIC_BASE_URL: https://prophylens.badakanadong.chatgpt.site
+          EXPECTED_SOURCE_REVISION: ${{ inputs.source_revision }}
+          BROWSERS: chromium,firefox,webkit
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hosted-release-evidence
+          path: |
+            playwright-report/
+            test-results/

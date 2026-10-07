@@ -1,6 +1,6 @@
 {
   "name": "prophylens",
-  "version": "0.1.0",
+  "version": "0.1.3-alpha",
   "private": true,
   "description": "Local-first chess review and practice from your own completed games.",
   "license": "AGPL-3.0-or-later",

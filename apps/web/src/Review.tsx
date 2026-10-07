@@ -1,8 +1,49 @@
-import { useMemo, useEffect, useState, useRef } from 'react';
+import { memo, useMemo, useEffect, useState, useRef, type Ref } from 'react';
 import { assessMove, isKeyMove, severityScore, formatLoss } from './analysis/classification';
 import { whiteEvaluation } from './analysis/variation';
 import type { PlayerSide, PositionAnalysis } from './analysis/types';
 import { Chessboard, moveToSan } from './Chessboard';
+import { movePrefix, moveNumber } from './analysis/move-number';
+const MoveRow = memo(function MoveRow({
+  row,
+  selected,
+  rowRef,
+  onSelect,
+}: {
+  row: { result: PositionAnalysis; assessment: ReturnType<typeof assessMove>; engineSan: string };
+  selected: boolean;
+  rowRef?: Ref<HTMLButtonElement>;
+  onSelect: (ply: number) => void;
+}) {
+  const { result, assessment, engineSan } = row;
+  return (
+    <button
+      className={`result-row ${selected ? 'result-selected' : ''}`}
+      ref={rowRef}
+      aria-pressed={selected}
+      onClick={() => onSelect(result.ply)}
+    >
+      <div className="move-cell">
+        <span>{movePrefix(result.fen)}</span>
+        <strong>{result.san}</strong>
+      </div>
+      <div>
+        <small>Assessment</small>
+        <strong className={`move-label label-${assessment.label.toLowerCase()}`}>
+          {assessment.label}
+        </strong>
+      </div>
+      <div>
+        <small>Loss</small>
+        <strong className="evaluation">{formatLoss(assessment)}</strong>
+      </div>
+      <div>
+        <small>Engine choice</small>
+        <code>{engineSan}</code>
+      </div>
+    </button>
+  );
+});
 export function Review({
   results,
   player,
@@ -19,10 +60,14 @@ export function Review({
     () =>
       results
         .filter((r) => player === 'both' || r.sideToMove === player)
-        .map((result) => ({ result, assessment: assessMove(result) })),
+        .map((result) => ({
+          result,
+          assessment: assessMove(result),
+          engineSan: moveToSan(result.fen, result.bestMoveUci),
+        })),
     [results, player],
   );
-  const keys = reviews.filter((r) => isKeyMove(r.assessment));
+  const keys = useMemo(() => reviews.filter((r) => isKeyMove(r.assessment)), [reviews]);
   const visible = filter === 'key' ? keys : reviews;
   const selectedIndex = Math.max(
     0,
@@ -39,15 +84,23 @@ export function Review({
     else if (bottom > list.scrollTop + list.clientHeight)
       list.scrollTop = bottom - list.clientHeight;
   }, [selected?.result.ply]);
-  const finiteLosses = reviews.flatMap((r) =>
-    r.assessment.centipawnLoss === undefined ? [] : [r.assessment.centipawnLoss],
+  const finiteLosses = useMemo(
+    () =>
+      reviews.flatMap((r) =>
+        r.assessment.centipawnLoss === undefined ? [] : [r.assessment.centipawnLoss],
+      ),
+    [reviews],
   );
   const average = finiteLosses.length
     ? finiteLosses.reduce((a, b) => a + b, 0) / finiteLosses.length / 100
     : undefined;
-  const worst = reviews.reduce<(typeof reviews)[number] | null>(
-    (a, b) => (!a || severityScore(b.assessment) > severityScore(a.assessment) ? b : a),
-    null,
+  const worst = useMemo(
+    () =>
+      reviews.reduce<(typeof reviews)[number] | null>(
+        (a, b) => (!a || severityScore(b.assessment) > severityScore(a.assessment) ? b : a),
+        null,
+      ),
+    [reviews],
   );
   const navigate = (direction: number) =>
     setSelectedPly(
@@ -55,23 +108,31 @@ export function Review({
         null,
     );
   useEffect(() => {
-    const listener = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target?.matches('input,select,textarea') || target?.isContentEditable) return;
-      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-        event.preventDefault();
-        navigate(event.key === 'ArrowLeft' ? -1 : 1);
-      }
-    };
-    window.addEventListener('keydown', listener);
-    return () => window.removeEventListener('keydown', listener);
-  });
-  useEffect(() => {
     setFilter('all');
     setSelectedPly(null);
   }, [player]);
   return (
-    <div className="review-grid">
+    <div
+      className="review-grid"
+      role="region"
+      aria-label="Chess move review"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        const target = event.target as HTMLElement;
+        if (
+          event.altKey ||
+          event.ctrlKey ||
+          event.metaKey ||
+          event.shiftKey ||
+          target.closest('input,select,textarea,[contenteditable]:not([contenteditable="false"])')
+        )
+          return;
+        if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+          event.preventDefault();
+          navigate(event.key === 'ArrowLeft' ? -1 : 1);
+        }
+      }}
+    >
       {selected && (
         <Chessboard
           result={selected.result}
@@ -129,36 +190,14 @@ export function Review({
           <span>{visible.length} moves shown</span>
         </div>
         <div className="result-list" aria-label="Analysed moves">
-          {visible.map(({ result, assessment }) => (
-            <button
-              className={`result-row ${selected?.result.ply === result.ply ? 'result-selected' : ''}`}
-              key={result.ply}
-              ref={selected?.result.ply === result.ply ? selectedRow : undefined}
-              aria-pressed={selected?.result.ply === result.ply}
-              onClick={() => setSelectedPly(result.ply)}
-            >
-              <div className="move-cell">
-                <span>
-                  {Math.ceil(result.ply / 2)}
-                  {result.ply % 2 ? '.' : '...'}
-                </span>
-                <strong>{result.san}</strong>
-              </div>
-              <div>
-                <small>Assessment</small>
-                <strong className={`move-label label-${assessment.label.toLowerCase()}`}>
-                  {assessment.label}
-                </strong>
-              </div>
-              <div>
-                <small>Loss</small>
-                <strong className="evaluation">{formatLoss(assessment)}</strong>
-              </div>
-              <div>
-                <small>Engine choice</small>
-                <code>{moveToSan(result.fen, result.bestMoveUci)}</code>
-              </div>
-            </button>
+          {visible.map((row) => (
+            <MoveRow
+              key={row.result.ply}
+              row={row}
+              selected={selected?.result.ply === row.result.ply}
+              rowRef={selected?.result.ply === row.result.ply ? selectedRow : undefined}
+              onSelect={setSelectedPly}
+            />
           ))}
           {!visible.length && <p className="empty-state">No moves match this filter.</p>}
         </div>
@@ -197,7 +236,7 @@ export function Review({
             {reviews.map(({ result }) => (
               <button
                 key={result.ply}
-                aria-label={`Jump to ${Math.ceil(result.ply / 2)}${result.ply % 2 ? ' white' : ' black'} ${result.san}`}
+                aria-label={`Jump to ${moveNumber(result.fen)} ${result.sideToMove} ${result.san}`}
                 aria-pressed={selected?.result.ply === result.ply}
                 onClick={() => {
                   if (filter === 'key' && !keys.some((r) => r.result.ply === result.ply))

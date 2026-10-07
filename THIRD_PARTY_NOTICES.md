@@ -1,6 +1,8 @@
 # Third-party notices
 
-This file records direct runtime components planned or present in the repository. It is not a substitute for the licence texts shipped by dependencies.
+The release includes the runtime components below. Exact resolved npm versions come from package-lock.json; the packaged licence texts and release.json hashes cover the shipped files.
+
+React and React DOM also bundle Scheduler (MIT). Its full licence is included at `licenses/scheduler.txt`, alongside `licenses/react.txt`, `licenses/react-dom.txt` and `licenses/chess.js.txt`. Stockfish's GPL text is at `engine/COPYING.txt`; Chessnut's Apache text is at `pieces/LICENSE.txt`; the app's AGPL text is at `LICENSE.txt`.
 
 | Component                   | Use                                  | Licence      | Distribution status                   |
 | --------------------------- | ------------------------------------ | ------------ | ------------------------------------- |

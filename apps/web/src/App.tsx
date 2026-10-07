@@ -338,7 +338,7 @@ export function App() {
             nodesPerPosition: settings.nodes,
             multiPv: settings.multiPv,
             classifierVersion: 'move-loss-v2',
-            appVersion: '0.1.0-alpha.1',
+            appVersion: import.meta.env.VITE_APP_VERSION ?? 'development',
             sourceRevision: import.meta.env.VITE_SOURCE_REVISION ?? 'development',
           },
         };
