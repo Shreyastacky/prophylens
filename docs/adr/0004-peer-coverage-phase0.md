@@ -5,6 +5,8 @@
 - Spike: B0 (`tools/spike-b0/coverage_spike.py`)
 - Related: ADR 0002, [PEER_BASELINE.md](../PEER_BASELINE.md), [SPIKES.md](../SPIKES.md) section B,
   [CODEX_REVIEW_COUNTERPOINTS.md](../CODEX_REVIEW_COUNTERPOINTS.md) section 13
+- Detailed analysis:
+  [spike-b0-peer-coverage-analysis.md](../analysis/spike-b0-peer-coverage-analysis.md)
 
 ## Scope
 
@@ -48,7 +50,9 @@ First ply where the share of games with enough evidence falls below 50% and belo
 | personal-leak (100)   |      13 |      17 |      15 |      19 |
 | No game covered after |      21 |         |      26 |         |
 
-Median number of Explorer games for the position:
+Median number of Explorer games for the position. These medians are computed over games still
+being walked at that ply, so they are conditional on survival and overstate typical depth. At ply 18, for example, only 24 of A's 60 games and 35 of
+B's 60 games are still being walked.
 
 | Ply |           A |           B |
 | --: | ----------: | ----------: |
@@ -106,6 +110,7 @@ progress raises the curve by about 5 to 7 points but leaves every crossing in th
   bands. Based on White's rating, A's games split 40/14/6 across the 1200, 1000 and 0–999 bands,
   and B's split 39/13/6/1/1 across 1600, 1400, 1200, 1800 and 0–999. We have not checked whether the
   Explorer buckets games by each player's rating or by the game's average.
+- Median sample sizes are conditional on survival (see Results) and overstate typical depth.
 - The walk stops a game after 3 consecutive plies below n = 20. A later transposition back into
   well-known territory would be missed. In practice coverage almost never recovers.
 

@@ -19,9 +19,18 @@ On macOS/Linux, use `tools/spike-b0/.venv/bin/python`.
 
 The Explorer and the per-user game export both require a Lichess login (both return 401 or 404
 without one). Create a personal API token at <https://lichess.org/account/oauth/token>; it needs no
-scopes. Then either set `LICHESS_TOKEN` in your environment or put it in
-`tools/spike-b0/.lichess-token`, as the bare token or as `LICHESS_TOKEN = "..."`. That file is
-git-ignored. Never commit a token.
+scopes. The script reads it only from the `LICHESS_TOKEN` environment variable:
+
+```powershell
+$env:LICHESS_TOKEN = "<your token>"
+```
+
+```bash
+export LICHESS_TOKEN="<your token>"
+```
+
+Set it in your shell session only. Never write the token into a file in this repository or commit
+it.
 
 `--self-test` needs no token.
 

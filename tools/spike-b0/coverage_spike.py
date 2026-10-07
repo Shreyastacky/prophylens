@@ -65,25 +65,11 @@ USER_AGENT = "ProphyLens-coverage-spike/0.1 (+https://github.com/Shreyastacky/pr
 # The explorer's rating buckets, as lower bounds.
 RATING_BUCKETS = [0, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500]
 
-# The explorer and the bulk game export both require a Lichess login. Read a
-# personal API token from the environment or from a git-ignored file next to
-# this script, holding either the bare token or LICHESS_TOKEN = "...".
-TOKEN_FILE = Path(__file__).resolve().parent / ".lichess-token"
-
-
-def load_token() -> str | None:
-    token = os.environ.get("LICHESS_TOKEN", "").strip()
-    if not token and TOKEN_FILE.exists():
-        line = next((l for l in TOKEN_FILE.read_text(encoding="utf-8-sig").splitlines()
-                     if l.strip()), "")
-        if "=" in line:
-            line = line.split("=", 1)[1]
-        token = line.strip().strip("\"'")
-    return token or None
-
-
+# The explorer and the bulk game export both require a Lichess login. The
+# personal API token is read only from the LICHESS_TOKEN environment variable,
+# never from a file, so it cannot end up in the repository.
 def auth_headers() -> dict[str, str]:
-    token = load_token()
+    token = os.environ.get("LICHESS_TOKEN", "").strip()
     return {"Authorization": f"Bearer {token}"} if token else {}
 
 
@@ -212,8 +198,8 @@ class ExplorerClient:
                 time.sleep(wait)
                 continue
             if response.status_code == 401:
-                print("    401 unauthorized: set LICHESS_TOKEN or create "
-                      f"{TOKEN_FILE.name} (see README)", file=sys.stderr)
+                print("    401 unauthorized: set the LICHESS_TOKEN environment "
+                      "variable (see README)", file=sys.stderr)
                 return None
             if 500 <= response.status_code < 600:
                 time.sleep((2**attempt) + random.random())
