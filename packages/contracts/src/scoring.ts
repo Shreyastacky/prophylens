@@ -117,16 +117,17 @@ export function lessonPriority(
   )
     throw new RangeError('Priority factors and weights must be finite with positive total weight');
   const severity = clampUnit(inputs.severity);
-  const factors: Array<[keyof PriorityInputs, number, number]> = [
+  const allFactors: Array<[keyof PriorityInputs, number, number]> = [
     ['severity', severity, weights.severity],
     ['recurrence', clampUnit(inputs.recurrence), weights.recurrence],
     ['fixability', clampUnit(inputs.fixability), weights.fixability],
     ['futureExposure', clampUnit(inputs.futureExposure), weights.futureExposure],
   ];
+  const factors = allFactors.filter(([, , weight]) => weight > 0);
 
   const weakest = factors.reduce(
     (min, [factor, value]) => (value < min.value ? { factor, value } : min),
-    { factor: 'severity' as keyof PriorityInputs, value: severity },
+    { factor: factors[0]![0], value: factors[0]![1] },
   );
 
   const zeroedBy = factors.filter(([, value]) => value === 0).map(([name]) => name);

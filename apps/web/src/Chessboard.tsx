@@ -159,7 +159,7 @@ export function Chessboard({
   return (
     <div className="board-panel">
       <div className="board-top">
-        <span>{result.sideToMove === 'white' ? 'White' : 'Black'} to move</span>
+        <span>{displayFen.split(' ')[1] === 'w' ? 'White' : 'Black'} to move</span>
         <button
           className="text-button"
           onClick={() => setFlipped((v) => !v)}

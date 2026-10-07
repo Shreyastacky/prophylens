@@ -26,6 +26,7 @@
     "@axe-core/playwright": "4.11.1",
     "@playwright/test": "^1.62.1",
     "@types/node": "^24.0.0",
+    "fake-indexeddb": "^6.2.5",
     "prettier": "^3.6.2",
     "typescript": "^5.9.2",
     "vite": "^7.1.2",

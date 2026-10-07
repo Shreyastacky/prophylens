@@ -6,12 +6,15 @@ import type { LibraryGame, PracticeAttempt } from './analysis/types';
 import { moveNumber } from './analysis/move-number';
 import { recordedPracticeAssessment, isAcceptedPracticeMove } from './analysis/practice-assessment';
 import { StockfishClient } from './analysis/stockfish';
+import { parsePgnAsync } from './analysis/parseAsync';
 export function Practice({
   games,
   onAttempt,
+  disabled = false,
 }: {
   games: LibraryGame[];
   onAttempt: (game: LibraryGame, attempt: PracticeAttempt) => Promise<void>;
+  disabled?: boolean;
 }) {
   const drills = useMemo(
     () =>
@@ -34,6 +37,10 @@ export function Practice({
   const pending = useRef<{ abort: AbortController; client?: StockfishClient } | null>(null);
   const drill = drills[Math.min(index, drills.length - 1)];
   const position = drill?.game.analysis.positions.find((p) => p.ply === drill.ply);
+  const analysisIdentity = useMemo(
+    () => JSON.stringify(drill?.game.analysis),
+    [drill?.game.analysis],
+  );
   useEffect(() => {
     pending.current?.abort.abort();
     pending.current?.client?.terminate();
@@ -47,9 +54,9 @@ export function Practice({
       pending.current?.abort.abort();
       pending.current?.client?.terminate();
     };
-  }, [drill?.game.id, drill?.ply]);
+  }, [drill?.game.id, drill?.ply, analysisIdentity, drill?.game.player, disabled]);
   async function attempt(uci: string) {
-    if (!position || !drill || checking) return;
+    if (!position || !drill || checking || disabled) return;
     setChecking(true);
     const request = {
       abort: new AbortController(),
@@ -69,8 +76,12 @@ export function Practice({
         request.client = client;
         try {
           const settings = drill.game.analysis.provenance;
+          const history = await parsePgnAsync(drill.game.pgn, request.abort.signal);
+          const source = history.positions.find((p) => p.ply === position.ply);
+          if (!source || source.fen !== position.fen)
+            throw new Error('Practice history no longer matches this position.');
           const evaluated = await client.analysePosition(
-            { ...position, moveUci, positionCommand: `position fen ${position.fen}` },
+            { ...source, moveUci },
             { nodes: settings.nodesPerPosition, multiPv: settings.multiPv },
             request.abort.signal,
             () => {},
@@ -120,7 +131,7 @@ export function Practice({
       }
     }
   }
-  const attempts = games.flatMap((g) => g.attempts);
+  const attempts = useMemo(() => games.flatMap((g) => g.attempts), [games]);
   return (
     <section id="practice" className="practice-section" aria-labelledby="practice-heading">
       <p className="step">PRACTISE YOUR POSITIONS</p>
@@ -142,7 +153,7 @@ export function Practice({
               playedMove={from}
               bestMove={revealed ? position.bestMoveUci : ''}
               onSquare={(square) => {
-                if (revealed || checking) return;
+                if (revealed || checking || disabled) return;
                 if (!from) {
                   setFrom(square);
                   return;
@@ -178,10 +189,13 @@ export function Practice({
                   value={answer}
                   onChange={(e) => setAnswer(e.target.value)}
                   placeholder="Nf3 or g1f3"
-                  disabled={revealed || checking}
+                  disabled={revealed || checking || disabled}
                 />
               </label>
-              <button className="primary-button" disabled={revealed || checking || !answer.trim()}>
+              <button
+                className="primary-button"
+                disabled={revealed || checking || disabled || !answer.trim()}
+              >
                 {checking ? 'Checking move' : 'Check move'}
               </button>
             </form>
@@ -198,14 +212,14 @@ export function Practice({
             <div className="actions">
               <button
                 className="secondary-button"
-                disabled={checking}
+                disabled={checking || disabled}
                 onClick={() => setRevealed(true)}
               >
                 Reveal move
               </button>
               <button
                 className="secondary-button"
-                disabled={checking}
+                disabled={checking || disabled}
                 onClick={() => {
                   setIndex((index + 1) % drills.length);
                   setFrom('');

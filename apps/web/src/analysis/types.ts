@@ -22,7 +22,7 @@ export interface EngineLine {
   nodes: number;
   scoreCp?: number;
   mateIn?: number;
-  scoreBound?: 'exact' | 'lower' | 'upper';
+  scoreBound?: 'exact' | 'lower' | 'upper' | 'unknown';
   wdl?: { win: number; draw: number; loss: number };
   movesUci: string[];
 }

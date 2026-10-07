@@ -25,6 +25,15 @@ describe('peer scoring primitives', () => {
 });
 
 describe('lesson priority', () => {
+  it('excludes factors with zero weight, including zero-factor explanations', () => {
+    const result = lessonPriority(
+      { severity: 0, recurrence: 1, fixability: 1, futureExposure: 1 },
+      { severity: 0, recurrence: 1, fixability: 1, futureExposure: 1 },
+    );
+    expect(result.priority).toBe(1);
+    expect(result.zeroedBy).toEqual([]);
+    expect(result.weakest.factor).not.toBe('severity');
+  });
   it('returns 1 when every ranking factor is maximal', () => {
     const { priority, zeroedBy } = lessonPriority({
       severity: 1,

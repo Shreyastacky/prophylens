@@ -174,11 +174,21 @@ export class StockfishClient {
         },
       );
 
-      const finalLines = [...lines.values()]
+      const candidates = [...lines.values()]
         .sort((a, b) => a.rank - b.rank)
         .map((line) => exactLines.get(line.movesUci[0]!) ?? line);
-      const best = exactLines.get(bestMove);
-      if (best) finalLines[0] = { ...best, rank: 1 };
+      const best =
+        exactLines.get(bestMove) ?? candidates.find((line) => line.movesUci[0] === bestMove);
+      const seen = new Set<string>();
+      const finalLines = (best ? [best, ...candidates] : candidates)
+        .filter((line) => {
+          const first = line.movesUci[0]!;
+          if (seen.has(first)) return false;
+          seen.add(first);
+          return true;
+        })
+        .slice(0, multiPv)
+        .map((line, index) => ({ ...line, rank: index + 1 }));
       return { bestMove, lines: finalLines };
     };
 
@@ -188,7 +198,13 @@ export class StockfishClient {
         ? { bestMove: position.moveUci, lines: [bestSearch.lines[0]!] }
         : await search(1, position.moveUci);
 
-    if (!bestSearch.bestMove || !bestSearch.lines[0] || !playedSearch.lines[0]) {
+    if (
+      !bestSearch.bestMove ||
+      !bestSearch.lines[0] ||
+      !playedSearch.lines[0] ||
+      bestSearch.lines[0].movesUci[0] !== bestSearch.bestMove ||
+      playedSearch.lines[0].movesUci[0] !== position.moveUci
+    ) {
       throw new Error(`Stockfish returned incomplete evidence at ply ${position.ply}.`);
     }
 
