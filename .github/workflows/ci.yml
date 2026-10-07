@@ -28,7 +28,7 @@ jobs:
           BROWSERS: chromium,firefox,webkit
       - name: Upload browser test evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: browser-test-evidence
           path: |
