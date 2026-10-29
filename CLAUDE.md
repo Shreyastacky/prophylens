@@ -37,10 +37,17 @@ packages/contracts/    Evidence, peer, diagnosis and lesson-scoring types/primit
 public/engine/         Pinned Stockfish 18 lite single-threaded JS/WASM, licence and manifest
 scripts/               Release build, security policy and production server for browser tests
 e2e/                   Playwright production journeys (Chromium, Firefox, WebKit)
+tools/spike-b0/        Standalone Python spike: Lichess Opening Explorer peer coverage by ply
 docs/                  Product, algorithm, privacy, data, release and architecture specs
 docs/adr/              Architecture decision records
+docs/analysis/         Detailed analyses behind ADRs (e.g. the Spike B0 coverage numbers)
 .github/               CI, contribution and issue templates
 ```
+
+`tools/spike-b0/` is not an npm workspace and is not covered by `npm run check`. It has its own
+`requirements.txt` and a git-ignored `.venv/`. It reads a Lichess personal API token only from the
+`LICHESS_TOKEN` environment variable. Never write the token into a file in the repository, and never
+commit its `out*/` run outputs or response cache.
 
 ### Built vs. documented
 
@@ -55,6 +62,17 @@ interpreter, peer adapter (explorer/index/model backends), the peer-aware review
 player model. The `PeerPosition` record and position-key scheme in
 [docs/PEER_BASELINE.md](docs/PEER_BASELINE.md) are design-stage only. Don't assume anything described
 in `docs/` exists in code until you've checked.
+
+### Peer data: what the evidence supports
+
+[ADR 0004](docs/adr/0004-peer-coverage-phase0.md) (status: **proposed**) records Spike B0. With
+exact-position matching, the public Lichess Opening Explorer has enough rating-matched games for half
+of sampled games only up to about ply 13–17 (moves 7–9), and for almost none after about ply 20. All
+three claim types run out within one or two plies of each other. The proposed direction is to narrow
+peer analysis: show peer context only where `peerClaimEligibility` passes, label deeper positions
+engine-only and keep the missing coverage visible. A custom index or model stays a separate,
+bounded evaluation. When working on any peer feature, don't imply middlegame peer coverage from this
+source. Treat thin coverage as a verdict on the Explorer, not on peer-relative analysis.
 
 ## Commands
 
@@ -100,8 +118,11 @@ pass a dependency/licence scan — see [docs/LICENSING.md](docs/LICENSING.md) fo
 - [docs/PEER_BASELINE.md](docs/PEER_BASELINE.md) — peer-data design: what it can and can't claim,
   position identity, delivery modes.
 - [docs/adr/](docs/adr/) — ADR 0001 (local-first analysis, worker-based Stockfish), ADR 0002
-  (validate peer UX with the Lichess Opening Explorer before building a proprietary index) and ADR
-  0003 (AGPL licence).
+  (validate peer UX with the Lichess Opening Explorer before building a proprietary index), ADR
+  0003 (AGPL licence) and ADR 0004 (Explorer peer coverage, Phase 0; proposed).
+- [docs/analysis/spike-b0-peer-coverage-analysis.md](docs/analysis/spike-b0-peer-coverage-analysis.md)
+  — the detailed Spike B0 numbers, limitations and recommended next measurements (lesson coverage
+  first).
 - [docs/RELEASE.md](docs/RELEASE.md) and [docs/NEXT_STEPS.md](docs/NEXT_STEPS.md) — current release
   evidence and the next development gates.
 - [docs/PRODUCT_DIRECTION.md](docs/PRODUCT_DIRECTION.md) — product pillars and explicit non-goals.
