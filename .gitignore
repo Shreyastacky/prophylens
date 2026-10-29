@@ -17,3 +17,8 @@ public/engine/*.wasm
 public/engine/*.nnue
 !public/engine/stockfish-18-lite-single.js
 !public/engine/stockfish-18-lite-single.wasm
+_incoming/
+tools/spike-b0/out*/
+tools/spike-b0/.venv/
+__pycache__/
+tools/spike-b0/.lichess-token
